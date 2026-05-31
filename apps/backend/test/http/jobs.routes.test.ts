@@ -67,6 +67,61 @@ test('creating a remote job rejects city', async (t) => {
   })
 })
 
+test('creating a job requires a case name', async (t) => {
+  const app = await build(t)
+
+  const res = await app.request
+    .post('/jobs')
+    .send({
+      caseName: '   ',
+      durationMinutes: 45,
+      locationType: 'REMOTE'
+    })
+
+  assert.equal(res.status, 400)
+  assert.deepStrictEqual(res.body, {
+    error: {
+      code: 'VALIDATION_ERROR',
+      message: 'Case name is required'
+    }
+  })
+})
+
+test('creating a job requires a positive duration', async (t) => {
+  const app = await build(t)
+
+  const res = await app.request
+    .post('/jobs')
+    .send({
+      caseName: 'Remote deposition',
+      durationMinutes: 0,
+      locationType: 'REMOTE'
+    })
+
+  assert.equal(res.status, 400)
+  assert.deepStrictEqual(res.body, {
+    error: {
+      code: 'VALIDATION_ERROR',
+      message: 'Duration must be greater than zero'
+    }
+  })
+})
+
+test('creating a job rejects invalid location type', async (t) => {
+  const app = await build(t)
+
+  const res = await app.request
+    .post('/jobs')
+    .send({
+      caseName: 'Remote deposition',
+      durationMinutes: 45,
+      locationType: 'HYBRID'
+    })
+
+  assert.equal(res.status, 400)
+  assert.equal(res.body.error.code, 'VALIDATION_ERROR')
+})
+
 test('lists created jobs for the dashboard', async (t) => {
   const app = await build(t)
 
