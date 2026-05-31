@@ -217,3 +217,149 @@ test('job list includes assignment and payout fields', async (t) => {
   assert.equal(res.body.jobs[0].payout.totalAmount, 110000)
   assert.equal(typeof res.body.jobs[0].payout.createdAt, 'string')
 })
+
+test('assigning a reporter moves a new job to assigned', async (t) => {
+  const app = await build(t)
+
+  const createRes = await app.request
+    .post('/jobs')
+    .send({
+      caseName: 'State v. Hart',
+      durationMinutes: 75,
+      locationType: 'PHYSICAL',
+      city: 'Jakarta'
+    })
+
+  const res = await app.request.post(`/jobs/${String(createRes.body.job.id)}/assign-reporter`)
+
+  assert.equal(res.status, 200)
+  assert.equal(res.body.job.status, 'ASSIGNED')
+  assert.deepStrictEqual(res.body.job.reporter, {
+    id: 1,
+    name: 'Amelia Hart'
+  })
+  assert.equal(typeof res.body.job.timestamps.assignedAt, 'string')
+  assert.equal(typeof res.body.job.timestamps.updatedAt, 'string')
+})
+
+test('assigning a reporter prefers an available same-city reporter for physical jobs', async (t) => {
+  const app = await build(t)
+
+  const createRes = await app.request
+    .post('/jobs')
+    .send({
+      caseName: 'Bandung hearing',
+      durationMinutes: 60,
+      locationType: 'PHYSICAL',
+      city: 'Bandung'
+    })
+
+  const res = await app.request.post(`/jobs/${String(createRes.body.job.id)}/assign-reporter`)
+
+  assert.equal(res.status, 200)
+  assert.deepStrictEqual(res.body.job.reporter, {
+    id: 2,
+    name: 'Bima Santoso'
+  })
+})
+
+test('assigning a reporter falls back to the first available reporter by name', async (t) => {
+  const app = await build(t)
+
+  const createRes = await app.request
+    .post('/jobs')
+    .send({
+      caseName: 'Surabaya hearing',
+      durationMinutes: 50,
+      locationType: 'PHYSICAL',
+      city: 'Surabaya'
+    })
+
+  const res = await app.request.post(`/jobs/${String(createRes.body.job.id)}/assign-reporter`)
+
+  assert.equal(res.status, 200)
+  assert.deepStrictEqual(res.body.job.reporter, {
+    id: 1,
+    name: 'Amelia Hart'
+  })
+})
+
+test('assigning a reporter to a remote job uses the first available reporter by name', async (t) => {
+  const app = await build(t)
+
+  const createRes = await app.request
+    .post('/jobs')
+    .send({
+      caseName: 'Remote deposition',
+      durationMinutes: 45,
+      locationType: 'REMOTE'
+    })
+
+  const res = await app.request.post(`/jobs/${String(createRes.body.job.id)}/assign-reporter`)
+
+  assert.equal(res.status, 200)
+  assert.deepStrictEqual(res.body.job.reporter, {
+    id: 1,
+    name: 'Amelia Hart'
+  })
+})
+
+test('assigning a reporter twice fails', async (t) => {
+  const app = await build(t)
+
+  const createRes = await app.request
+    .post('/jobs')
+    .send({
+      caseName: 'Remote deposition',
+      durationMinutes: 45,
+      locationType: 'REMOTE'
+    })
+
+  const jobId = createRes.body.job.id
+
+  const firstRes = await app.request.post(`/jobs/${String(jobId)}/assign-reporter`)
+  const secondRes = await app.request.post(`/jobs/${String(jobId)}/assign-reporter`)
+
+  assert.equal(firstRes.status, 200)
+  assert.equal(secondRes.status, 409)
+  assert.deepStrictEqual(secondRes.body, {
+    error: {
+      code: 'JOB_ALREADY_ASSIGNED',
+      message: 'Job is already assigned'
+    }
+  })
+})
+
+test('concurrent reporter assignment allows exactly one winner', async (t) => {
+  const app = await build(t)
+
+  const createRes = await app.request
+    .post('/jobs')
+    .send({
+      caseName: 'Remote deposition',
+      durationMinutes: 45,
+      locationType: 'REMOTE'
+    })
+
+  const jobId = createRes.body.job.id
+  const responses = await Promise.all([
+    app.request.post(`/jobs/${String(jobId)}/assign-reporter`),
+    app.request.post(`/jobs/${String(jobId)}/assign-reporter`)
+  ])
+
+  const successfulResponses = responses.filter((res) => res.status === 200)
+  const conflictResponses = responses.filter((res) => res.status === 409)
+
+  assert.equal(successfulResponses.length, 1)
+  assert.equal(conflictResponses.length, 1)
+  assert.equal(conflictResponses[0].body.error.code, 'JOB_ALREADY_ASSIGNED')
+
+  const jobsRes = await app.request.get('/jobs')
+
+  assert.equal(jobsRes.status, 200)
+  assert.equal(jobsRes.body.jobs[0].status, 'ASSIGNED')
+  assert.deepStrictEqual(jobsRes.body.jobs[0].reporter, {
+    id: 1,
+    name: 'Amelia Hart'
+  })
+})

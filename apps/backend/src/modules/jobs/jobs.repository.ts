@@ -1,6 +1,11 @@
 import type Database from 'better-sqlite3'
 import { serializeDashboardJob } from './jobs.presenter'
-import type { DashboardJob, DashboardJobRow, LocationType } from './jobs.types'
+import type {
+  DashboardJob,
+  DashboardJobRow,
+  LocationType,
+  ReporterAssignmentCandidate
+} from './jobs.types'
 
 type CreateJobInput = {
   caseName: string
@@ -62,11 +67,54 @@ export function listDashboardJobs (db: Database.Database): DashboardJob[] {
   return rows.map(serializeDashboardJob)
 }
 
-function getDashboardJobById (db: Database.Database, id: number): DashboardJob | null {
+export function getDashboardJobById (db: Database.Database, id: number): DashboardJob | null {
   const row = db.prepare(`
     ${dashboardJobSelect}
     WHERE jobs.id = ?
   `).get(id) as DashboardJobRow | undefined
 
   return row === undefined ? null : serializeDashboardJob(row)
+}
+
+export function findAvailableReporterForJob (
+  db: Database.Database,
+  job: Pick<DashboardJob, 'locationType' | 'city'>
+): ReporterAssignmentCandidate | null {
+  const reporter = db.prepare(`
+    SELECT id, name, city
+    FROM reporters
+    WHERE availability = 1
+    ORDER BY
+      CASE
+        WHEN @locationType = 'PHYSICAL' AND city = @city THEN 0
+        ELSE 1
+      END,
+      name ASC
+    LIMIT 1
+  `).get({
+    locationType: job.locationType,
+    city: job.city
+  }) as ReporterAssignmentCandidate | undefined
+
+  return reporter ?? null
+}
+
+export function assignReporterToJob (
+  db: Database.Database,
+  jobId: number,
+  reporterId: number
+): boolean {
+  const result = db.prepare(`
+    UPDATE jobs
+    SET
+      reporter_id = ?,
+      status = 'ASSIGNED',
+      assigned_at = datetime('now'),
+      updated_at = datetime('now')
+    WHERE id = ?
+      AND status = 'NEW'
+      AND reporter_id IS NULL
+  `).run(reporterId, jobId)
+
+  return result.changes === 1
 }

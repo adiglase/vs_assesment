@@ -2,7 +2,8 @@ import type Database from 'better-sqlite3'
 import { Router } from 'express'
 import { sendError } from '../../http/errors'
 import { createJob, listDashboardJobs } from './jobs.repository'
-import { createJobSchema } from './jobs.schemas'
+import { createJobSchema, jobIdParamsSchema } from './jobs.schemas'
+import { assignReporter } from './jobs.workflow'
 
 export const jobsRouter = Router()
 
@@ -33,4 +34,25 @@ jobsRouter.get('/jobs', (req, res) => {
   const jobs = listDashboardJobs(db)
 
   res.json({ jobs })
+})
+
+jobsRouter.post('/jobs/:id/assign-reporter', (req, res) => {
+  const parsedParams = jobIdParamsSchema.safeParse(req.params)
+
+  if (!parsedParams.success) {
+    const firstIssue = parsedParams.error.issues[0]
+    sendError(res, 400, 'VALIDATION_ERROR', firstIssue?.message ?? 'Invalid job id')
+    return
+  }
+
+  const db = req.app.locals.db as Database.Database
+  const result = assignReporter(db, parsedParams.data.id)
+
+  if (!result.ok) {
+    const { statusCode, code, message } = result.error
+    sendError(res, statusCode, code, message)
+    return
+  }
+
+  res.json({ job: result.value })
 })

@@ -23,3 +23,7 @@ export const createJobSchema = z.object({
     })
   }
 })
+
+export const jobIdParamsSchema = z.object({
+  id: z.coerce.number().int().positive('Job id must be a positive integer')
+}).strict()

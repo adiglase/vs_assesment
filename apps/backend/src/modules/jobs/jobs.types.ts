@@ -59,3 +59,9 @@ export type DashboardJob = {
     createdAt: string
   } | null
 }
+
+export type ReporterAssignmentCandidate = {
+  id: number
+  name: string
+  city: string
+}
