@@ -7,7 +7,7 @@
     "test": "test"
   },
   "scripts": {
-    "test": "npm run build:ts && tsc -p test/tsconfig.json && c8 node --test -r ts-node/register \"test/**/*.test.ts\"",
+    "test": "npm run build:ts && tsc -p test/tsconfig.json && TS_NODE_PROJECT=test/tsconfig.json c8 node --test -r ts-node/register \"test/**/*.test.ts\"",
     "start": "npm run build:ts && node dist/server.js",
     "db:reset": "npm run build:ts && node dist/db/reset.js",
     "typecheck": "tsc --noEmit",
