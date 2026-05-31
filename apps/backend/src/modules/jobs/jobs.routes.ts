@@ -3,7 +3,7 @@ import { Router } from 'express'
 import { sendError } from '../../http/errors'
 import { createJob, listDashboardJobs } from './jobs.repository'
 import { createJobSchema, jobIdParamsSchema } from './jobs.schemas'
-import { assignReporter } from './jobs.workflow'
+import { assignReporter, type WorkflowErrorCode } from './jobs.workflow'
 
 export const jobsRouter = Router()
 
@@ -49,10 +49,18 @@ jobsRouter.post('/jobs/:id/assign-reporter', (req, res) => {
   const result = assignReporter(db, parsedParams.data.id)
 
   if (!result.ok) {
-    const { statusCode, code, message } = result.error
-    sendError(res, statusCode, code, message)
+    const { code, message } = result.error
+    sendError(res, statusCodeForWorkflowError(code), code, message)
     return
   }
 
   res.json({ job: result.value })
 })
+
+function statusCodeForWorkflowError (code: WorkflowErrorCode): 404 | 409 {
+  if (code === 'JOB_NOT_FOUND') {
+    return 404
+  }
+
+  return 409
+}

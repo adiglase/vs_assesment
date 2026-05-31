@@ -4,11 +4,18 @@ import {
   findAvailableReporterForJob,
   getDashboardJobById
 } from './jobs.repository'
+import { canTransitionJobStatus } from './jobs.state-machine'
 import type { DashboardJob } from './jobs.types'
 
+export type WorkflowErrorCode =
+  | 'JOB_NOT_FOUND'
+  | 'JOB_ALREADY_ASSIGNED'
+  | 'INVALID_JOB_STATUS'
+  | 'NO_AVAILABLE_REPORTER'
+  | 'REPORTER_ASSIGNMENT_CONFLICT'
+
 type WorkflowFailure = {
-  statusCode: 404 | 409
-  code: string
+  code: WorkflowErrorCode
   message: string
 }
 
@@ -16,82 +23,31 @@ type WorkflowResult<T> =
   | { ok: true, value: T }
   | { ok: false, error: WorkflowFailure }
 
+const reporterAssignmentTargetStatus = 'ASSIGNED'
+
 export function assignReporter (db: Database.Database, jobId: number): WorkflowResult<DashboardJob> {
   const run = db.transaction((id: number): WorkflowResult<DashboardJob> => {
     const job = getDashboardJobById(db, id)
 
     if (job === null) {
-      return {
-        ok: false,
-        error: {
-          statusCode: 404,
-          code: 'JOB_NOT_FOUND',
-          message: 'Job was not found'
-        }
-      }
+      return failure('JOB_NOT_FOUND', 'Job was not found')
     }
 
-    if (job.reporter !== null) {
-      return {
-        ok: false,
-        error: {
-          statusCode: 409,
-          code: 'JOB_ALREADY_ASSIGNED',
-          message: 'Job is already assigned'
-        }
-      }
-    }
-
-    if (job.status !== 'NEW') {
-      return {
-        ok: false,
-        error: {
-          statusCode: 409,
-          code: 'INVALID_JOB_STATUS',
-          message: 'Reporter assignment requires a new job'
-        }
-      }
+    const validationFailure = validateReporterAssignment(job)
+    if (validationFailure !== null) {
+      return validationFailure
     }
 
     const reporter = findAvailableReporterForJob(db, job)
 
     if (reporter === null) {
-      return {
-        ok: false,
-        error: {
-          statusCode: 409,
-          code: 'NO_AVAILABLE_REPORTER',
-          message: 'No available reporter could be assigned'
-        }
-      }
+      return failure('NO_AVAILABLE_REPORTER', 'No available reporter could be assigned')
     }
 
     const assigned = assignReporterToJob(db, id, reporter.id)
 
     if (!assigned) {
-      const latestJob = getDashboardJobById(db, id)
-
-      if (latestJob === null) {
-        return {
-          ok: false,
-          error: {
-            statusCode: 404,
-            code: 'JOB_NOT_FOUND',
-            message: 'Job was not found'
-          }
-        }
-      }
-
-      return {
-        ok: false,
-        error: {
-          statusCode: 409,
-          code: latestJob.reporter === null ? 'REPORTER_ASSIGNMENT_CONFLICT' : 'JOB_ALREADY_ASSIGNED',
-          message: latestJob.reporter === null
-            ? 'Job could not be assigned because its workflow state changed'
-            : 'Job is already assigned'
-        }
-      }
+      return reporterAssignmentConflict(db, id)
     }
 
     const assignedJob = getDashboardJobById(db, id)
@@ -100,11 +56,61 @@ export function assignReporter (db: Database.Database, jobId: number): WorkflowR
       throw new Error(`Assigned job ${String(id)} could not be loaded`)
     }
 
-    return {
-      ok: true,
-      value: assignedJob
-    }
+    return success(assignedJob)
   })
 
   return run(jobId)
+}
+
+function validateReporterAssignment (job: DashboardJob): WorkflowResult<never> | null {
+  if (job.reporter !== null) {
+    return failure('JOB_ALREADY_ASSIGNED', 'Job is already assigned')
+  }
+
+  if (!canTransitionJobStatus(job.status, reporterAssignmentTargetStatus)) {
+    return failure('INVALID_JOB_STATUS', 'Reporter assignment requires a new job')
+  }
+
+  return null
+}
+
+function reporterAssignmentConflict (
+  db: Database.Database,
+  jobId: number
+): WorkflowResult<never> {
+  const latestJob = getDashboardJobById(db, jobId)
+
+  if (latestJob === null) {
+    return failure('JOB_NOT_FOUND', 'Job was not found')
+  }
+
+  const validationFailure = validateReporterAssignment(latestJob)
+  if (validationFailure !== null) {
+    return validationFailure
+  }
+
+  return failure(
+    'REPORTER_ASSIGNMENT_CONFLICT',
+    'Job could not be assigned because its workflow state changed'
+  )
+}
+
+function success<T> (value: T): WorkflowResult<T> {
+  return {
+    ok: true,
+    value
+  }
+}
+
+function failure (
+  code: WorkflowFailure['code'],
+  message: string
+): WorkflowResult<never> {
+  return {
+    ok: false,
+    error: {
+      code,
+      message
+    }
+  }
 }
