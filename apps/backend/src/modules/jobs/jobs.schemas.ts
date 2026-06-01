@@ -31,3 +31,7 @@ export const jobIdParamsSchema = z.object({
 export const assignReporterSchema = z.object({
   reporterId: z.number().int().positive('Reporter id must be a positive integer').optional()
 }).strict()
+
+export const assignEditorSchema = z.object({
+  editorId: z.number().int().positive('Editor id must be a positive integer')
+}).strict()

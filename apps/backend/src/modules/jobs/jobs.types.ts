@@ -69,3 +69,9 @@ export type ReporterAssignmentCandidate = {
 export type ReporterAssignmentSelection = ReporterAssignmentCandidate & {
   availability: boolean
 }
+
+export type EditorAssignmentSelection = {
+  id: number
+  name: string
+  availability: boolean
+}

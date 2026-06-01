@@ -3,6 +3,7 @@ import { serializeDashboardJob } from './jobs.presenter'
 import type {
   DashboardJob,
   DashboardJobRow,
+  EditorAssignmentSelection,
   LocationType,
   ReporterAssignmentCandidate,
   ReporterAssignmentSelection
@@ -122,6 +123,27 @@ export function getReporterForAssignment (
   }
 }
 
+export function getEditorForAssignment (
+  db: Database.Database,
+  editorId: number
+): EditorAssignmentSelection | null {
+  const editor = db.prepare(`
+    SELECT id, name, availability
+    FROM editors
+    WHERE id = ?
+  `).get(editorId) as ({ id: number, name: string, availability: 0 | 1 }) | undefined
+
+  if (editor === undefined) {
+    return null
+  }
+
+  return {
+    id: editor.id,
+    name: editor.name,
+    availability: editor.availability === 1
+  }
+}
+
 export function assignReporterToJob (
   db: Database.Database,
   jobId: number,
@@ -138,6 +160,24 @@ export function assignReporterToJob (
       AND status = 'NEW'
       AND reporter_id IS NULL
   `).run(reporterId, jobId)
+
+  return result.changes === 1
+}
+
+export function assignEditorToJob (
+  db: Database.Database,
+  jobId: number,
+  editorId: number
+): boolean {
+  const result = db.prepare(`
+    UPDATE jobs
+    SET
+      editor_id = ?,
+      updated_at = datetime('now')
+    WHERE id = ?
+      AND status = 'TRANSCRIBED'
+      AND editor_id IS NULL
+  `).run(editorId, jobId)
 
   return result.changes === 1
 }

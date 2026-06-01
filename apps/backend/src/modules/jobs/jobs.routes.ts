@@ -2,8 +2,8 @@ import type Database from 'better-sqlite3'
 import { Router } from 'express'
 import { sendError } from '../../http/errors'
 import { createJob, listDashboardJobs } from './jobs.repository'
-import { assignReporterSchema, createJobSchema, jobIdParamsSchema } from './jobs.schemas'
-import { assignReporter, markTranscribed, type WorkflowErrorCode } from './jobs.workflow'
+import { assignEditorSchema, assignReporterSchema, createJobSchema, jobIdParamsSchema } from './jobs.schemas'
+import { assignEditor, assignReporter, markTranscribed, type WorkflowErrorCode } from './jobs.workflow'
 
 export const jobsRouter = Router()
 
@@ -86,12 +86,41 @@ jobsRouter.post('/jobs/:id/mark-transcribed', (req, res) => {
   res.json({ job: result.value })
 })
 
+jobsRouter.post('/jobs/:id/assign-editor', (req, res) => {
+  const parsedParams = jobIdParamsSchema.safeParse(req.params)
+
+  if (!parsedParams.success) {
+    const firstIssue = parsedParams.error.issues[0]
+    sendError(res, 400, 'VALIDATION_ERROR', firstIssue?.message ?? 'Invalid job id')
+    return
+  }
+
+  const parsedBody = assignEditorSchema.safeParse(req.body ?? {})
+
+  if (!parsedBody.success) {
+    const firstIssue = parsedBody.error.issues[0]
+    sendError(res, 400, 'VALIDATION_ERROR', firstIssue?.message ?? 'Invalid editor assignment payload')
+    return
+  }
+
+  const db = req.app.locals.db as Database.Database
+  const result = assignEditor(db, parsedParams.data.id, parsedBody.data.editorId)
+
+  if (!result.ok) {
+    const { code, message } = result.error
+    sendError(res, statusCodeForWorkflowError(code), code, message)
+    return
+  }
+
+  res.json({ job: result.value })
+})
+
 function statusCodeForWorkflowError (code: WorkflowErrorCode): 400 | 404 | 409 {
   if (code === 'REPORTER_REQUIRED') {
     return 400
   }
 
-  if (code === 'JOB_NOT_FOUND' || code === 'REPORTER_NOT_FOUND') {
+  if (code === 'JOB_NOT_FOUND' || code === 'REPORTER_NOT_FOUND' || code === 'EDITOR_NOT_FOUND') {
     return 404
   }
 

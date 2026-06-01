@@ -1,8 +1,10 @@
 import type Database from 'better-sqlite3'
 import {
+  assignEditorToJob,
   assignReporterToJob,
   findAvailableReporterForJob,
   getDashboardJobById,
+  getEditorForAssignment,
   getReporterForAssignment,
   markJobTranscribed
 } from './jobs.repository'
@@ -18,6 +20,10 @@ export type WorkflowErrorCode =
   | 'REPORTER_UNAVAILABLE'
   | 'NO_AVAILABLE_REPORTER'
   | 'REPORTER_ASSIGNMENT_CONFLICT'
+  | 'EDITOR_NOT_FOUND'
+  | 'EDITOR_UNAVAILABLE'
+  | 'EDITOR_ALREADY_ASSIGNED'
+  | 'EDITOR_ASSIGNMENT_CONFLICT'
 
 type WorkflowFailure = {
   code: WorkflowErrorCode
@@ -29,6 +35,7 @@ type WorkflowResult<T> =
   | { ok: false, error: WorkflowFailure }
 
 const reporterAssignmentTargetStatus = 'ASSIGNED'
+const editorAssignmentRequiredStatus = 'TRANSCRIBED'
 const markTranscribedTargetStatus = 'TRANSCRIBED'
 
 export function assignReporter (
@@ -108,6 +115,51 @@ export function markTranscribed (
   return run(jobId)
 }
 
+export function assignEditor (
+  db: Database.Database,
+  jobId: number,
+  editorId: number
+): WorkflowResult<DashboardJob> {
+  const run = db.transaction((id: number): WorkflowResult<DashboardJob> => {
+    const job = getDashboardJobById(db, id)
+
+    if (job === null) {
+      return failure('JOB_NOT_FOUND', 'Job was not found')
+    }
+
+    const validationFailure = validateEditorAssignment(job)
+    if (validationFailure !== null) {
+      return validationFailure
+    }
+
+    const editor = getEditorForAssignment(db, editorId)
+
+    if (editor === null) {
+      return failure('EDITOR_NOT_FOUND', 'Editor was not found')
+    }
+
+    if (!editor.availability) {
+      return failure('EDITOR_UNAVAILABLE', 'Editor is not available')
+    }
+
+    const assigned = assignEditorToJob(db, id, editor.id)
+
+    if (!assigned) {
+      return editorAssignmentConflict(db, id)
+    }
+
+    const assignedJob = getDashboardJobById(db, id)
+
+    if (assignedJob === null) {
+      throw new Error(`Editor-assigned job ${String(id)} could not be loaded`)
+    }
+
+    return success(assignedJob)
+  })
+
+  return run(jobId)
+}
+
 function selectReporterForJob (
   db: Database.Database,
   job: DashboardJob,
@@ -156,6 +208,18 @@ function validateReporterAssignment (job: DashboardJob): WorkflowResult<never> |
   return null
 }
 
+function validateEditorAssignment (job: DashboardJob): WorkflowResult<never> | null {
+  if (job.editor !== null) {
+    return failure('EDITOR_ALREADY_ASSIGNED', 'Job already has an assigned editor')
+  }
+
+  if (job.status !== editorAssignmentRequiredStatus) {
+    return failure('INVALID_JOB_STATUS', 'Editor assignment requires a transcribed job')
+  }
+
+  return null
+}
+
 function reporterAssignmentConflict (
   db: Database.Database,
   jobId: number
@@ -174,6 +238,27 @@ function reporterAssignmentConflict (
   return failure(
     'REPORTER_ASSIGNMENT_CONFLICT',
     'Job could not be assigned because its workflow state changed'
+  )
+}
+
+function editorAssignmentConflict (
+  db: Database.Database,
+  jobId: number
+): WorkflowResult<never> {
+  const latestJob = getDashboardJobById(db, jobId)
+
+  if (latestJob === null) {
+    return failure('JOB_NOT_FOUND', 'Job was not found')
+  }
+
+  const validationFailure = validateEditorAssignment(latestJob)
+  if (validationFailure !== null) {
+    return validationFailure
+  }
+
+  return failure(
+    'EDITOR_ASSIGNMENT_CONFLICT',
+    'Job could not be assigned an editor because its workflow state changed'
   )
 }
 

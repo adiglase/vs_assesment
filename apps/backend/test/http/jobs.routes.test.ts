@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import * as assert from 'node:assert'
-import { build } from '../helper'
+import { build, type TestApp } from '../helper'
 
 test('creates a physical job', async (t) => {
   const app = await build(t)
@@ -526,3 +526,156 @@ test('marking a transcribed job transcribed again fails', async (t) => {
     }
   })
 })
+
+test('assigning an editor to a transcribed job stores the editor without changing status', async (t) => {
+  const app = await build(t)
+  const jobId = await createTranscribedRemoteJob(app)
+
+  const res = await app.request
+    .post(`/jobs/${String(jobId)}/assign-editor`)
+    .send({ editorId: 1 })
+
+  assert.equal(res.status, 200)
+  assert.equal(res.body.job.status, 'TRANSCRIBED')
+  assert.deepStrictEqual(res.body.job.editor, {
+    id: 1,
+    name: 'Dewi Lestari'
+  })
+  assert.deepStrictEqual(res.body.job.reporter, {
+    id: 1,
+    name: 'Amelia Hart'
+  })
+  assert.equal(typeof res.body.job.timestamps.updatedAt, 'string')
+})
+
+test('assigning an editor before transcription fails', async (t) => {
+  const app = await build(t)
+
+  const createRes = await app.request
+    .post('/jobs')
+    .send({
+      caseName: 'Remote deposition',
+      durationMinutes: 45,
+      locationType: 'REMOTE'
+    })
+
+  const res = await app.request
+    .post(`/jobs/${String(createRes.body.job.id)}/assign-editor`)
+    .send({ editorId: 1 })
+
+  assert.equal(res.status, 409)
+  assert.deepStrictEqual(res.body, {
+    error: {
+      code: 'INVALID_JOB_STATUS',
+      message: 'Editor assignment requires a transcribed job'
+    }
+  })
+})
+
+test('assigning an unavailable editor fails', async (t) => {
+  const app = await build(t)
+  const jobId = await createTranscribedRemoteJob(app)
+
+  const res = await app.request
+    .post(`/jobs/${String(jobId)}/assign-editor`)
+    .send({ editorId: 3 })
+
+  assert.equal(res.status, 409)
+  assert.deepStrictEqual(res.body, {
+    error: {
+      code: 'EDITOR_UNAVAILABLE',
+      message: 'Editor is not available'
+    }
+  })
+})
+
+test('assigning a missing editor fails', async (t) => {
+  const app = await build(t)
+  const jobId = await createTranscribedRemoteJob(app)
+
+  const res = await app.request
+    .post(`/jobs/${String(jobId)}/assign-editor`)
+    .send({ editorId: 999 })
+
+  assert.equal(res.status, 404)
+  assert.deepStrictEqual(res.body, {
+    error: {
+      code: 'EDITOR_NOT_FOUND',
+      message: 'Editor was not found'
+    }
+  })
+})
+
+test('assigning an editor twice fails', async (t) => {
+  const app = await build(t)
+  const jobId = await createTranscribedRemoteJob(app)
+
+  const firstRes = await app.request
+    .post(`/jobs/${String(jobId)}/assign-editor`)
+    .send({ editorId: 1 })
+  const secondRes = await app.request
+    .post(`/jobs/${String(jobId)}/assign-editor`)
+    .send({ editorId: 2 })
+
+  assert.equal(firstRes.status, 200)
+  assert.equal(secondRes.status, 409)
+  assert.deepStrictEqual(secondRes.body, {
+    error: {
+      code: 'EDITOR_ALREADY_ASSIGNED',
+      message: 'Job already has an assigned editor'
+    }
+  })
+})
+
+test('concurrent editor assignment allows exactly one winner', async (t) => {
+  const app = await build(t)
+  const jobId = await createTranscribedRemoteJob(app)
+
+  const responses = await Promise.all([
+    app.request
+      .post(`/jobs/${String(jobId)}/assign-editor`)
+      .send({ editorId: 1 }),
+    app.request
+      .post(`/jobs/${String(jobId)}/assign-editor`)
+      .send({ editorId: 2 })
+  ])
+
+  const successfulResponses = responses.filter((res) => res.status === 200)
+  const conflictResponses = responses.filter((res) => res.status === 409)
+
+  assert.equal(successfulResponses.length, 1)
+  assert.equal(conflictResponses.length, 1)
+  assert.equal(conflictResponses[0].body.error.code, 'EDITOR_ALREADY_ASSIGNED')
+
+  const jobsRes = await app.request.get('/jobs')
+
+  assert.equal(jobsRes.status, 200)
+  assert.equal(jobsRes.body.jobs[0].status, 'TRANSCRIBED')
+  assert.notEqual(jobsRes.body.jobs[0].editor, null)
+})
+
+async function createTranscribedRemoteJob (app: TestApp): Promise<number> {
+  const createRes = await app.request
+    .post('/jobs')
+    .send({
+      caseName: 'Remote deposition',
+      durationMinutes: 45,
+      locationType: 'REMOTE'
+    })
+
+  assert.equal(createRes.status, 201)
+
+  const jobId = createRes.body.job.id
+
+  const assignReporterRes = await app.request
+    .post(`/jobs/${String(jobId)}/assign-reporter`)
+    .send({ reporterId: 1 })
+
+  assert.equal(assignReporterRes.status, 200)
+
+  const markTranscribedRes = await app.request.post(`/jobs/${String(jobId)}/mark-transcribed`)
+
+  assert.equal(markTranscribedRes.status, 200)
+
+  return jobId
+}
