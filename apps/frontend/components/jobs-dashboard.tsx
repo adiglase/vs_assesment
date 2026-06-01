@@ -5,13 +5,20 @@ import {
   ApiError,
   createJob,
   getJobs,
+  getReporters,
   type Job,
   type LocationType,
+  type Reporter,
 } from "../lib/api";
 
 type JobsState =
   | { status: "loading" }
   | { status: "loaded"; jobs: Job[] }
+  | { status: "error"; message: string };
+
+type ReportersState =
+  | { status: "loading" }
+  | { status: "loaded"; reporters: Reporter[] }
   | { status: "error"; message: string };
 
 type CreateJobFormState = {
@@ -44,6 +51,12 @@ function formatStaffName(staff: { name: string } | null) {
 
 export function JobsDashboard() {
   const [jobsState, setJobsState] = useState<JobsState>({ status: "loading" });
+  const [reportersState, setReportersState] = useState<ReportersState>({
+    status: "loading",
+  });
+  const [selectedReporterIds, setSelectedReporterIds] = useState<
+    Record<number, string>
+  >({});
   const [createForm, setCreateForm] = useState<CreateJobFormState>(
     initialCreateJobForm,
   );
@@ -95,6 +108,79 @@ export function JobsDashboard() {
       ignoreResult = true;
     };
   }, []);
+
+  useEffect(() => {
+    let ignoreResult = false;
+
+    async function loadInitialReporters() {
+      try {
+        const reporters = await getReporters();
+
+        if (!ignoreResult) {
+          setReportersState({ status: "loaded", reporters });
+        }
+      } catch (error) {
+        if (!ignoreResult) {
+          const message =
+            error instanceof ApiError
+              ? error.message
+              : "Could not load court reporters.";
+
+          setReportersState({ status: "error", message });
+        }
+      }
+    }
+
+    void loadInitialReporters();
+
+    return () => {
+      ignoreResult = true;
+    };
+  }, []);
+
+  function renderReporterAssignmentCell(job: Job) {
+    if (job.status !== "NEW") {
+      return <span className="text-zinc-500">-</span>;
+    }
+
+    if (job.locationType === "PHYSICAL") {
+      return <span className="text-zinc-700">Auto assignment</span>;
+    }
+
+    if (reportersState.status === "loading") {
+      return <span className="text-zinc-600">Loading reporters...</span>;
+    }
+
+    if (reportersState.status === "error") {
+      return <span className="text-red-600">{reportersState.message}</span>;
+    }
+
+    return (
+      <select
+        aria-label={`Court reporter for ${job.caseName}`}
+        className="w-56 rounded border border-zinc-300 px-2 py-1.5 text-sm text-zinc-950 outline-none focus:border-zinc-500"
+        value={selectedReporterIds[job.id] ?? ""}
+        onChange={(event) =>
+          setSelectedReporterIds((current) => ({
+            ...current,
+            [job.id]: event.target.value,
+          }))
+        }
+      >
+        <option value="">Select reporter</option>
+        {reportersState.reporters.map((reporter) => (
+          <option
+            disabled={!reporter.availability}
+            key={reporter.id}
+            value={reporter.id}
+          >
+            {reporter.name} ({reporter.city})
+            {reporter.availability ? "" : " - unavailable"}
+          </option>
+        ))}
+      </select>
+    );
+  }
 
   async function handleCreateJobSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -294,6 +380,7 @@ export function JobsDashboard() {
                     <th className="px-3 py-3">Location</th>
                     <th className="px-3 py-3">City</th>
                     <th className="px-3 py-3">Court Reporter</th>
+                    <th className="px-3 py-3">Reporter Assignment</th>
                     <th className="px-3 py-3">Editor</th>
                   </tr>
                 </thead>
@@ -319,6 +406,9 @@ export function JobsDashboard() {
                       </td>
                       <td className="whitespace-nowrap px-3 py-3 text-zinc-700">
                         {formatStaffName(job.reporter)}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-3">
+                        {renderReporterAssignmentCell(job)}
                       </td>
                       <td className="whitespace-nowrap px-3 py-3 text-zinc-700">
                         {formatStaffName(job.editor)}

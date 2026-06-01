@@ -75,6 +75,10 @@ type JobsResponse = {
   jobs: Job[];
 };
 
+type ReportersResponse = {
+  reporters: Reporter[];
+};
+
 type JobResponse = {
   job: Job;
 };
@@ -127,6 +131,11 @@ async function requestJson<T>(
 export async function getJobs(): Promise<Job[]> {
   const data = await requestJson<JobsResponse>("/jobs");
   return data.jobs;
+}
+
+export async function getReporters(): Promise<Reporter[]> {
+  const data = await requestJson<ReportersResponse>("/reporters");
+  return data.reporters;
 }
 
 export async function createJob(input: CreateJobInput): Promise<Job> {
