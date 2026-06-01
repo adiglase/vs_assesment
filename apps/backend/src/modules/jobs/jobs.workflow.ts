@@ -2,15 +2,19 @@ import type Database from 'better-sqlite3'
 import {
   assignReporterToJob,
   findAvailableReporterForJob,
-  getDashboardJobById
+  getDashboardJobById,
+  getReporterForAssignment
 } from './jobs.repository'
 import { canTransitionJobStatus } from './jobs.state-machine'
-import type { DashboardJob } from './jobs.types'
+import type { DashboardJob, ReporterAssignmentCandidate } from './jobs.types'
 
 export type WorkflowErrorCode =
   | 'JOB_NOT_FOUND'
   | 'JOB_ALREADY_ASSIGNED'
   | 'INVALID_JOB_STATUS'
+  | 'REPORTER_REQUIRED'
+  | 'REPORTER_NOT_FOUND'
+  | 'REPORTER_UNAVAILABLE'
   | 'NO_AVAILABLE_REPORTER'
   | 'REPORTER_ASSIGNMENT_CONFLICT'
 
@@ -25,7 +29,11 @@ type WorkflowResult<T> =
 
 const reporterAssignmentTargetStatus = 'ASSIGNED'
 
-export function assignReporter (db: Database.Database, jobId: number): WorkflowResult<DashboardJob> {
+export function assignReporter (
+  db: Database.Database,
+  jobId: number,
+  reporterId?: number
+): WorkflowResult<DashboardJob> {
   const run = db.transaction((id: number): WorkflowResult<DashboardJob> => {
     const job = getDashboardJobById(db, id)
 
@@ -38,13 +46,13 @@ export function assignReporter (db: Database.Database, jobId: number): WorkflowR
       return validationFailure
     }
 
-    const reporter = findAvailableReporterForJob(db, job)
+    const reporter = selectReporterForJob(db, job, reporterId)
 
-    if (reporter === null) {
-      return failure('NO_AVAILABLE_REPORTER', 'No available reporter could be assigned')
+    if (!reporter.ok) {
+      return reporter
     }
 
-    const assigned = assignReporterToJob(db, id, reporter.id)
+    const assigned = assignReporterToJob(db, id, reporter.value.id)
 
     if (!assigned) {
       return reporterAssignmentConflict(db, id)
@@ -60,6 +68,42 @@ export function assignReporter (db: Database.Database, jobId: number): WorkflowR
   })
 
   return run(jobId)
+}
+
+function selectReporterForJob (
+  db: Database.Database,
+  job: DashboardJob,
+  reporterId?: number
+): WorkflowResult<ReporterAssignmentCandidate> {
+  if (job.locationType === 'REMOTE') {
+    if (reporterId === undefined) {
+      return failure('REPORTER_REQUIRED', 'Remote jobs require a selected reporter')
+    }
+
+    const reporter = getReporterForAssignment(db, reporterId)
+
+    if (reporter === null) {
+      return failure('REPORTER_NOT_FOUND', 'Reporter was not found')
+    }
+
+    if (!reporter.availability) {
+      return failure('REPORTER_UNAVAILABLE', 'Reporter is not available')
+    }
+
+    return success({
+      id: reporter.id,
+      name: reporter.name,
+      city: reporter.city
+    })
+  }
+
+  const reporter = findAvailableReporterForJob(db, job)
+
+  if (reporter === null) {
+    return failure('NO_AVAILABLE_REPORTER', 'No available reporter could be assigned')
+  }
+
+  return success(reporter)
 }
 
 function validateReporterAssignment (job: DashboardJob): WorkflowResult<never> | null {

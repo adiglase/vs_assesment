@@ -4,7 +4,8 @@ import type {
   DashboardJob,
   DashboardJobRow,
   LocationType,
-  ReporterAssignmentCandidate
+  ReporterAssignmentCandidate,
+  ReporterAssignmentSelection
 } from './jobs.types'
 
 type CreateJobInput = {
@@ -97,6 +98,28 @@ export function findAvailableReporterForJob (
   }) as ReporterAssignmentCandidate | undefined
 
   return reporter ?? null
+}
+
+export function getReporterForAssignment (
+  db: Database.Database,
+  reporterId: number
+): ReporterAssignmentSelection | null {
+  const reporter = db.prepare(`
+    SELECT id, name, city, availability
+    FROM reporters
+    WHERE id = ?
+  `).get(reporterId) as (ReporterAssignmentCandidate & { availability: 0 | 1 }) | undefined
+
+  if (reporter === undefined) {
+    return null
+  }
+
+  return {
+    id: reporter.id,
+    name: reporter.name,
+    city: reporter.city,
+    availability: reporter.availability === 1
+  }
 }
 
 export function assignReporterToJob (

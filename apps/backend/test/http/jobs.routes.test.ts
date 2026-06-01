@@ -284,7 +284,7 @@ test('assigning a reporter falls back to the first available reporter by name', 
   })
 })
 
-test('assigning a reporter to a remote job uses the first available reporter by name', async (t) => {
+test('assigning a reporter to a remote job requires a selected reporter', async (t) => {
   const app = await build(t)
 
   const createRes = await app.request
@@ -297,10 +297,83 @@ test('assigning a reporter to a remote job uses the first available reporter by 
 
   const res = await app.request.post(`/jobs/${String(createRes.body.job.id)}/assign-reporter`)
 
+  assert.equal(res.status, 400)
+  assert.deepStrictEqual(res.body, {
+    error: {
+      code: 'REPORTER_REQUIRED',
+      message: 'Remote jobs require a selected reporter'
+    }
+  })
+})
+
+test('assigning a reporter to a remote job uses the selected available reporter', async (t) => {
+  const app = await build(t)
+
+  const createRes = await app.request
+    .post('/jobs')
+    .send({
+      caseName: 'Remote deposition',
+      durationMinutes: 45,
+      locationType: 'REMOTE'
+    })
+
+  const res = await app.request
+    .post(`/jobs/${String(createRes.body.job.id)}/assign-reporter`)
+    .send({ reporterId: 2 })
+
   assert.equal(res.status, 200)
+  assert.equal(res.body.job.status, 'ASSIGNED')
   assert.deepStrictEqual(res.body.job.reporter, {
-    id: 1,
-    name: 'Amelia Hart'
+    id: 2,
+    name: 'Bima Santoso'
+  })
+})
+
+test('assigning an unavailable reporter to a remote job fails', async (t) => {
+  const app = await build(t)
+
+  const createRes = await app.request
+    .post('/jobs')
+    .send({
+      caseName: 'Remote deposition',
+      durationMinutes: 45,
+      locationType: 'REMOTE'
+    })
+
+  const res = await app.request
+    .post(`/jobs/${String(createRes.body.job.id)}/assign-reporter`)
+    .send({ reporterId: 3 })
+
+  assert.equal(res.status, 409)
+  assert.deepStrictEqual(res.body, {
+    error: {
+      code: 'REPORTER_UNAVAILABLE',
+      message: 'Reporter is not available'
+    }
+  })
+})
+
+test('assigning a missing reporter to a remote job fails', async (t) => {
+  const app = await build(t)
+
+  const createRes = await app.request
+    .post('/jobs')
+    .send({
+      caseName: 'Remote deposition',
+      durationMinutes: 45,
+      locationType: 'REMOTE'
+    })
+
+  const res = await app.request
+    .post(`/jobs/${String(createRes.body.job.id)}/assign-reporter`)
+    .send({ reporterId: 999 })
+
+  assert.equal(res.status, 404)
+  assert.deepStrictEqual(res.body, {
+    error: {
+      code: 'REPORTER_NOT_FOUND',
+      message: 'Reporter was not found'
+    }
   })
 })
 
@@ -317,8 +390,12 @@ test('assigning a reporter twice fails', async (t) => {
 
   const jobId = createRes.body.job.id
 
-  const firstRes = await app.request.post(`/jobs/${String(jobId)}/assign-reporter`)
-  const secondRes = await app.request.post(`/jobs/${String(jobId)}/assign-reporter`)
+  const firstRes = await app.request
+    .post(`/jobs/${String(jobId)}/assign-reporter`)
+    .send({ reporterId: 1 })
+  const secondRes = await app.request
+    .post(`/jobs/${String(jobId)}/assign-reporter`)
+    .send({ reporterId: 2 })
 
   assert.equal(firstRes.status, 200)
   assert.equal(secondRes.status, 409)
@@ -343,8 +420,12 @@ test('concurrent reporter assignment allows exactly one winner', async (t) => {
 
   const jobId = createRes.body.job.id
   const responses = await Promise.all([
-    app.request.post(`/jobs/${String(jobId)}/assign-reporter`),
-    app.request.post(`/jobs/${String(jobId)}/assign-reporter`)
+    app.request
+      .post(`/jobs/${String(jobId)}/assign-reporter`)
+      .send({ reporterId: 1 }),
+    app.request
+      .post(`/jobs/${String(jobId)}/assign-reporter`)
+      .send({ reporterId: 1 })
   ])
 
   const successfulResponses = responses.filter((res) => res.status === 200)
