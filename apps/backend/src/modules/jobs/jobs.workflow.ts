@@ -2,10 +2,12 @@ import type Database from 'better-sqlite3'
 import {
   assignEditorToJob,
   assignReporterToJob,
+  createPayoutRecord,
   findAvailableReporterForJob,
   getDashboardJobById,
   getEditorForAssignment,
   getReporterForAssignment,
+  markJobCompleted,
   markJobReviewed,
   markJobTranscribed
 } from './jobs.repository'
@@ -26,6 +28,7 @@ export type WorkflowErrorCode =
   | 'EDITOR_ALREADY_ASSIGNED'
   | 'EDITOR_ASSIGNMENT_CONFLICT'
   | 'EDITOR_REQUIRED'
+  | 'PAYOUT_ALREADY_EXISTS'
 
 type WorkflowFailure = {
   code: WorkflowErrorCode
@@ -40,6 +43,9 @@ const reporterAssignmentTargetStatus = 'ASSIGNED'
 const editorAssignmentRequiredStatus = 'TRANSCRIBED'
 const markTranscribedTargetStatus = 'TRANSCRIBED'
 const markReviewedTargetStatus = 'REVIEWED'
+const completeJobTargetStatus = 'COMPLETED'
+const reporterRateIdrPerMinute = 2000
+const editorFlatRateIdr = 50000
 
 export function assignReporter (
   db: Database.Database,
@@ -203,6 +209,67 @@ export function markReviewed (
   return run(jobId)
 }
 
+export function completeJob (
+  db: Database.Database,
+  jobId: number
+): WorkflowResult<DashboardJob> {
+  const run = db.transaction((id: number): WorkflowResult<DashboardJob> => {
+    const job = getDashboardJobById(db, id)
+
+    if (job === null) {
+      return failure('JOB_NOT_FOUND', 'Job was not found')
+    }
+
+    if (job.payout !== null) {
+      return failure('PAYOUT_ALREADY_EXISTS', 'Job already has a payout record')
+    }
+
+    if (!canTransitionJobStatus(job.status, completeJobTargetStatus)) {
+      return failure('INVALID_JOB_STATUS', 'Completing a job requires a reviewed job')
+    }
+
+    if (job.reporter === null || job.editor === null) {
+      return failure('INVALID_JOB_STATUS', 'Completing a job requires assigned staff')
+    }
+
+    const completed = markJobCompleted(db, id)
+
+    if (!completed) {
+      return completionConflict(db, id)
+    }
+
+    const reporterAmount = job.durationMinutes * reporterRateIdrPerMinute
+    const editorAmount = editorFlatRateIdr
+
+    createPayoutRecord(db, {
+      jobId: id,
+      reporterId: job.reporter.id,
+      editorId: job.editor.id,
+      reporterAmount,
+      editorAmount,
+      totalAmount: reporterAmount + editorAmount
+    })
+
+    const completedJob = getDashboardJobById(db, id)
+
+    if (completedJob === null) {
+      throw new Error(`Completed job ${String(id)} could not be loaded`)
+    }
+
+    return success(completedJob)
+  })
+
+  try {
+    return run(jobId)
+  } catch (error) {
+    if (isUniquePaymentConstraintError(error)) {
+      return failure('PAYOUT_ALREADY_EXISTS', 'Job already has a payout record')
+    }
+
+    throw error
+  }
+}
+
 function selectReporterForJob (
   db: Database.Database,
   job: DashboardJob,
@@ -303,6 +370,41 @@ function editorAssignmentConflict (
     'EDITOR_ASSIGNMENT_CONFLICT',
     'Job could not be assigned an editor because its workflow state changed'
   )
+}
+
+function completionConflict (
+  db: Database.Database,
+  jobId: number
+): WorkflowResult<never> {
+  const latestJob = getDashboardJobById(db, jobId)
+
+  if (latestJob === null) {
+    return failure('JOB_NOT_FOUND', 'Job was not found')
+  }
+
+  if (latestJob.payout !== null) {
+    return failure('PAYOUT_ALREADY_EXISTS', 'Job already has a payout record')
+  }
+
+  if (!canTransitionJobStatus(latestJob.status, completeJobTargetStatus)) {
+    return failure('INVALID_JOB_STATUS', 'Completing a job requires a reviewed job')
+  }
+
+  return failure(
+    'INVALID_JOB_STATUS',
+    'Job could not be completed because its workflow state changed'
+  )
+}
+
+function isUniquePaymentConstraintError (error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false
+  }
+
+  const maybeSqliteError = error as Error & { code?: string }
+
+  return maybeSqliteError.code === 'SQLITE_CONSTRAINT_UNIQUE' ||
+    (maybeSqliteError.code === 'SQLITE_CONSTRAINT' && error.message.includes('payments.job_id'))
 }
 
 function success<T> (value: T): WorkflowResult<T> {

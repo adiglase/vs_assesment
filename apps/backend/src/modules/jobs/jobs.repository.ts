@@ -16,6 +16,15 @@ type CreateJobInput = {
   city: string | null
 }
 
+type CreatePayoutRecordInput = {
+  jobId: number
+  reporterId: number
+  editorId: number
+  reporterAmount: number
+  editorAmount: number
+  totalAmount: number
+}
+
 const dashboardJobSelect = `
   SELECT
     jobs.id,
@@ -217,4 +226,47 @@ export function markJobReviewed (
   `).run(jobId)
 
   return result.changes === 1
+}
+
+export function markJobCompleted (
+  db: Database.Database,
+  jobId: number
+): boolean {
+  const result = db.prepare(`
+    UPDATE jobs
+    SET
+      status = 'COMPLETED',
+      completed_at = datetime('now'),
+      updated_at = datetime('now')
+    WHERE id = ?
+      AND status = 'REVIEWED'
+      AND reporter_id IS NOT NULL
+      AND editor_id IS NOT NULL
+  `).run(jobId)
+
+  return result.changes === 1
+}
+
+export function createPayoutRecord (
+  db: Database.Database,
+  input: CreatePayoutRecordInput
+): void {
+  db.prepare(`
+    INSERT INTO payments (
+      job_id,
+      reporter_id,
+      editor_id,
+      reporter_amount,
+      editor_amount,
+      total_amount
+    )
+    VALUES (
+      @jobId,
+      @reporterId,
+      @editorId,
+      @reporterAmount,
+      @editorAmount,
+      @totalAmount
+    )
+  `).run(input)
 }

@@ -745,6 +745,124 @@ test('marking a reviewed job reviewed again fails', async (t) => {
   })
 })
 
+test('completing a reviewed job creates one payout record', async (t) => {
+  const app = await build(t)
+  const jobId = await createReviewedRemoteJob(app)
+
+  const res = await app.request.post(`/jobs/${String(jobId)}/complete`)
+
+  assert.equal(res.status, 200)
+  assert.equal(res.body.job.status, 'COMPLETED')
+  assert.equal(typeof res.body.job.timestamps.completedAt, 'string')
+  assert.deepStrictEqual(res.body.job.payout, {
+    id: 1,
+    reporterAmount: 90000,
+    editorAmount: 50000,
+    totalAmount: 140000,
+    createdAt: res.body.job.payout.createdAt
+  })
+  assert.equal(typeof res.body.job.payout.createdAt, 'string')
+
+  const paymentCount = app.db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM payments
+    WHERE job_id = ?
+  `).get(jobId) as { count: number }
+
+  assert.equal(paymentCount.count, 1)
+})
+
+test('completing a transcribed job fails', async (t) => {
+  const app = await build(t)
+  const jobId = await createTranscribedRemoteJob(app)
+
+  await app.request
+    .post(`/jobs/${String(jobId)}/assign-editor`)
+    .send({ editorId: 1 })
+
+  const res = await app.request.post(`/jobs/${String(jobId)}/complete`)
+
+  assert.equal(res.status, 409)
+  assert.deepStrictEqual(res.body, {
+    error: {
+      code: 'INVALID_JOB_STATUS',
+      message: 'Completing a job requires a reviewed job'
+    }
+  })
+})
+
+test('completing a job twice fails without creating a duplicate payout', async (t) => {
+  const app = await build(t)
+  const jobId = await createReviewedRemoteJob(app)
+
+  const firstRes = await app.request.post(`/jobs/${String(jobId)}/complete`)
+  const secondRes = await app.request.post(`/jobs/${String(jobId)}/complete`)
+
+  assert.equal(firstRes.status, 200)
+  assert.equal(secondRes.status, 409)
+  assert.deepStrictEqual(secondRes.body, {
+    error: {
+      code: 'PAYOUT_ALREADY_EXISTS',
+      message: 'Job already has a payout record'
+    }
+  })
+
+  const paymentCount = app.db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM payments
+    WHERE job_id = ?
+  `).get(jobId) as { count: number }
+
+  assert.equal(paymentCount.count, 1)
+})
+
+test('concurrent completion creates at most one payout record', async (t) => {
+  const app = await build(t)
+  const jobId = await createReviewedRemoteJob(app)
+
+  const responses = await Promise.all([
+    app.request.post(`/jobs/${String(jobId)}/complete`),
+    app.request.post(`/jobs/${String(jobId)}/complete`)
+  ])
+
+  const successfulResponses = responses.filter((res) => res.status === 200)
+  const conflictResponses = responses.filter((res) => res.status === 409)
+
+  assert.equal(successfulResponses.length, 1)
+  assert.equal(conflictResponses.length, 1)
+  assert.equal(conflictResponses[0].body.error.code, 'PAYOUT_ALREADY_EXISTS')
+
+  const paymentCount = app.db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM payments
+    WHERE job_id = ?
+  `).get(jobId) as { count: number }
+
+  assert.equal(paymentCount.count, 1)
+
+  const jobsRes = await app.request.get('/jobs')
+
+  assert.equal(jobsRes.status, 200)
+  assert.equal(jobsRes.body.jobs[0].status, 'COMPLETED')
+  assert.notEqual(jobsRes.body.jobs[0].payout, null)
+})
+
+async function createReviewedRemoteJob (app: TestApp): Promise<number> {
+  const jobId = await createTranscribedRemoteJob(app)
+
+  const assignEditorRes = await app.request
+    .post(`/jobs/${String(jobId)}/assign-editor`)
+    .send({ editorId: 1 })
+
+  assert.equal(assignEditorRes.status, 200)
+
+  const markReviewedRes = await app.request.post(`/jobs/${String(jobId)}/mark-reviewed`)
+
+  assert.equal(markReviewedRes.status, 200)
+
+  return jobId
+}
+
 async function createTranscribedRemoteJob (app: TestApp): Promise<number> {
   const createRes = await app.request
     .post('/jobs')
