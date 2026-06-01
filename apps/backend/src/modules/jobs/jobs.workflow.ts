@@ -6,6 +6,7 @@ import {
   getDashboardJobById,
   getEditorForAssignment,
   getReporterForAssignment,
+  markJobReviewed,
   markJobTranscribed
 } from './jobs.repository'
 import { canTransitionJobStatus } from './jobs.state-machine'
@@ -24,6 +25,7 @@ export type WorkflowErrorCode =
   | 'EDITOR_UNAVAILABLE'
   | 'EDITOR_ALREADY_ASSIGNED'
   | 'EDITOR_ASSIGNMENT_CONFLICT'
+  | 'EDITOR_REQUIRED'
 
 type WorkflowFailure = {
   code: WorkflowErrorCode
@@ -37,6 +39,7 @@ type WorkflowResult<T> =
 const reporterAssignmentTargetStatus = 'ASSIGNED'
 const editorAssignmentRequiredStatus = 'TRANSCRIBED'
 const markTranscribedTargetStatus = 'TRANSCRIBED'
+const markReviewedTargetStatus = 'REVIEWED'
 
 export function assignReporter (
   db: Database.Database,
@@ -155,6 +158,46 @@ export function assignEditor (
     }
 
     return success(assignedJob)
+  })
+
+  return run(jobId)
+}
+
+export function markReviewed (
+  db: Database.Database,
+  jobId: number
+): WorkflowResult<DashboardJob> {
+  const run = db.transaction((id: number): WorkflowResult<DashboardJob> => {
+    const job = getDashboardJobById(db, id)
+
+    if (job === null) {
+      return failure('JOB_NOT_FOUND', 'Job was not found')
+    }
+
+    if (!canTransitionJobStatus(job.status, markReviewedTargetStatus)) {
+      return failure('INVALID_JOB_STATUS', 'Marking reviewed requires a transcribed job')
+    }
+
+    if (job.editor === null) {
+      return failure('EDITOR_REQUIRED', 'Marking reviewed requires an assigned editor')
+    }
+
+    const marked = markJobReviewed(db, id)
+
+    if (!marked) {
+      return failure(
+        'INVALID_JOB_STATUS',
+        'Job could not be marked reviewed because its workflow state changed'
+      )
+    }
+
+    const reviewedJob = getDashboardJobById(db, id)
+
+    if (reviewedJob === null) {
+      throw new Error(`Reviewed job ${String(id)} could not be loaded`)
+    }
+
+    return success(reviewedJob)
   })
 
   return run(jobId)

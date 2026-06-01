@@ -654,6 +654,97 @@ test('concurrent editor assignment allows exactly one winner', async (t) => {
   assert.notEqual(jobsRes.body.jobs[0].editor, null)
 })
 
+test('marking a transcribed job with an editor reviewed moves it to reviewed', async (t) => {
+  const app = await build(t)
+  const jobId = await createTranscribedRemoteJob(app)
+
+  const assignEditorRes = await app.request
+    .post(`/jobs/${String(jobId)}/assign-editor`)
+    .send({ editorId: 1 })
+
+  assert.equal(assignEditorRes.status, 200)
+
+  const res = await app.request.post(`/jobs/${String(jobId)}/mark-reviewed`)
+
+  assert.equal(res.status, 200)
+  assert.equal(res.body.job.status, 'REVIEWED')
+  assert.deepStrictEqual(res.body.job.reporter, {
+    id: 1,
+    name: 'Amelia Hart'
+  })
+  assert.deepStrictEqual(res.body.job.editor, {
+    id: 1,
+    name: 'Dewi Lestari'
+  })
+  assert.equal(typeof res.body.job.timestamps.reviewedAt, 'string')
+  assert.equal(typeof res.body.job.timestamps.updatedAt, 'string')
+  assert.equal(res.body.job.payout, null)
+})
+
+test('marking reviewed without an assigned editor fails', async (t) => {
+  const app = await build(t)
+  const jobId = await createTranscribedRemoteJob(app)
+
+  const res = await app.request.post(`/jobs/${String(jobId)}/mark-reviewed`)
+
+  assert.equal(res.status, 409)
+  assert.deepStrictEqual(res.body, {
+    error: {
+      code: 'EDITOR_REQUIRED',
+      message: 'Marking reviewed requires an assigned editor'
+    }
+  })
+})
+
+test('marking an assigned job reviewed fails', async (t) => {
+  const app = await build(t)
+
+  const createRes = await app.request
+    .post('/jobs')
+    .send({
+      caseName: 'Remote deposition',
+      durationMinutes: 45,
+      locationType: 'REMOTE'
+    })
+
+  const jobId = createRes.body.job.id
+
+  await app.request
+    .post(`/jobs/${String(jobId)}/assign-reporter`)
+    .send({ reporterId: 1 })
+
+  const res = await app.request.post(`/jobs/${String(jobId)}/mark-reviewed`)
+
+  assert.equal(res.status, 409)
+  assert.deepStrictEqual(res.body, {
+    error: {
+      code: 'INVALID_JOB_STATUS',
+      message: 'Marking reviewed requires a transcribed job'
+    }
+  })
+})
+
+test('marking a reviewed job reviewed again fails', async (t) => {
+  const app = await build(t)
+  const jobId = await createTranscribedRemoteJob(app)
+
+  await app.request
+    .post(`/jobs/${String(jobId)}/assign-editor`)
+    .send({ editorId: 1 })
+
+  const firstRes = await app.request.post(`/jobs/${String(jobId)}/mark-reviewed`)
+  const secondRes = await app.request.post(`/jobs/${String(jobId)}/mark-reviewed`)
+
+  assert.equal(firstRes.status, 200)
+  assert.equal(secondRes.status, 409)
+  assert.deepStrictEqual(secondRes.body, {
+    error: {
+      code: 'INVALID_JOB_STATUS',
+      message: 'Marking reviewed requires a transcribed job'
+    }
+  })
+})
+
 async function createTranscribedRemoteJob (app: TestApp): Promise<number> {
   const createRes = await app.request
     .post('/jobs')

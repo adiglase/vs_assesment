@@ -199,3 +199,22 @@ export function markJobTranscribed (
 
   return result.changes === 1
 }
+
+export function markJobReviewed (
+  db: Database.Database,
+  jobId: number
+): boolean {
+  const result = db.prepare(`
+    UPDATE jobs
+    SET
+      status = 'REVIEWED',
+      reviewed_at = datetime('now'),
+      updated_at = datetime('now')
+    WHERE id = ?
+      AND status = 'TRANSCRIBED'
+      AND reporter_id IS NOT NULL
+      AND editor_id IS NOT NULL
+  `).run(jobId)
+
+  return result.changes === 1
+}

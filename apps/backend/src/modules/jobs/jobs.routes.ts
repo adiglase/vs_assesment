@@ -3,7 +3,7 @@ import { Router } from 'express'
 import { sendError } from '../../http/errors'
 import { createJob, listDashboardJobs } from './jobs.repository'
 import { assignEditorSchema, assignReporterSchema, createJobSchema, jobIdParamsSchema } from './jobs.schemas'
-import { assignEditor, assignReporter, markTranscribed, type WorkflowErrorCode } from './jobs.workflow'
+import { assignEditor, assignReporter, markReviewed, markTranscribed, type WorkflowErrorCode } from './jobs.workflow'
 
 export const jobsRouter = Router()
 
@@ -105,6 +105,27 @@ jobsRouter.post('/jobs/:id/assign-editor', (req, res) => {
 
   const db = req.app.locals.db as Database.Database
   const result = assignEditor(db, parsedParams.data.id, parsedBody.data.editorId)
+
+  if (!result.ok) {
+    const { code, message } = result.error
+    sendError(res, statusCodeForWorkflowError(code), code, message)
+    return
+  }
+
+  res.json({ job: result.value })
+})
+
+jobsRouter.post('/jobs/:id/mark-reviewed', (req, res) => {
+  const parsedParams = jobIdParamsSchema.safeParse(req.params)
+
+  if (!parsedParams.success) {
+    const firstIssue = parsedParams.error.issues[0]
+    sendError(res, 400, 'VALIDATION_ERROR', firstIssue?.message ?? 'Invalid job id')
+    return
+  }
+
+  const db = req.app.locals.db as Database.Database
+  const result = markReviewed(db, parsedParams.data.id)
 
   if (!result.ok) {
     const { code, message } = result.error
