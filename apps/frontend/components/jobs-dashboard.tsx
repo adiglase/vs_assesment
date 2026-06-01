@@ -9,6 +9,7 @@ import {
   getEditors,
   getJobs,
   getReporters,
+  markReviewed,
   markTranscribed,
   type Editor,
   type Job,
@@ -377,22 +378,34 @@ export function JobsDashboard() {
   }
 
   function renderWorkflowActionCell(job: Job) {
-    if (job.status !== "ASSIGNED") {
-      return <span className="text-zinc-500">-</span>;
-    }
-
     const transitionStatus = workflowTransitionStatuses[job.id];
     const isSubmitting = transitionStatus?.status === "submitting";
+    const action =
+      job.status === "ASSIGNED"
+        ? {
+            label: "Mark transcribed",
+            onClick: () => void handleMarkTranscribed(job.id),
+          }
+        : job.status === "TRANSCRIBED" && job.editor !== null
+          ? {
+              label: "Mark reviewed",
+              onClick: () => void handleMarkReviewed(job.id),
+            }
+          : null;
+
+    if (action === null) {
+      return <span className="text-zinc-500">-</span>;
+    }
 
     return (
       <div className="grid gap-2">
         <button
           className="w-max cursor-pointer rounded bg-zinc-950 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-zinc-400"
           disabled={isSubmitting}
-          onClick={() => void handleMarkTranscribed(job.id)}
+          onClick={action.onClick}
           type="button"
         >
-          {isSubmitting ? "Updating..." : "Mark transcribed"}
+          {isSubmitting ? "Updating..." : action.label}
         </button>
 
         {transitionStatus?.status === "error" ? (
@@ -402,6 +415,24 @@ export function JobsDashboard() {
         ) : null}
       </div>
     );
+  }
+
+  function renderNextActionCell(job: Job) {
+    if (job.status === "NEW") {
+      return renderReporterAssignmentCell(job);
+    }
+
+    if (job.status === "ASSIGNED") {
+      return renderWorkflowActionCell(job);
+    }
+
+    if (job.status === "TRANSCRIBED") {
+      return job.editor === null
+        ? renderEditorAssignmentCell(job)
+        : renderWorkflowActionCell(job);
+    }
+
+    return <span className="text-zinc-500">No action</span>;
   }
 
   async function handleAssignPhysicalReporter(jobId: number) {
@@ -502,6 +533,34 @@ export function JobsDashboard() {
         error instanceof ApiError
           ? error.message
           : "Could not mark the transcription job as transcribed.";
+
+      setWorkflowTransitionStatuses((current) => ({
+        ...current,
+        [jobId]: { status: "error", message },
+      }));
+    }
+  }
+
+  async function handleMarkReviewed(jobId: number) {
+    setWorkflowTransitionStatuses((current) => ({
+      ...current,
+      [jobId]: { status: "submitting" },
+    }));
+
+    try {
+      await markReviewed(jobId);
+      await refreshJobs();
+
+      setWorkflowTransitionStatuses((current) => {
+        const remaining = { ...current };
+        delete remaining[jobId];
+        return remaining;
+      });
+    } catch (error) {
+      const message =
+        error instanceof ApiError
+          ? error.message
+          : "Could not mark the transcription job as reviewed.";
 
       setWorkflowTransitionStatuses((current) => ({
         ...current,
@@ -753,10 +812,10 @@ export function JobsDashboard() {
                     <th className="px-3 py-3">Location</th>
                     <th className="px-3 py-3">City</th>
                     <th className="px-3 py-3">Court Reporter</th>
-                    <th className="px-3 py-3">Reporter Assignment</th>
-                    <th className="px-3 py-3">Workflow</th>
                     <th className="px-3 py-3">Editor</th>
-                    <th className="px-3 py-3">Editor Assignment</th>
+                    <th className="px-3 py-3">
+                      Next Action
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-200">
@@ -782,17 +841,11 @@ export function JobsDashboard() {
                       <td className="whitespace-nowrap px-3 py-3 text-zinc-700">
                         {formatStaffName(job.reporter)}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-3">
-                        {renderReporterAssignmentCell(job)}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-3">
-                        {renderWorkflowActionCell(job)}
-                      </td>
                       <td className="whitespace-nowrap px-3 py-3 text-zinc-700">
                         {formatStaffName(job.editor)}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-3">
-                        {renderEditorAssignmentCell(job)}
+                      <td className="min-w-72 px-3 py-3 align-top">
+                        {renderNextActionCell(job)}
                       </td>
                     </tr>
                   ))}

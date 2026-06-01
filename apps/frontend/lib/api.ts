@@ -189,3 +189,11 @@ export async function markTranscribed(jobId: number): Promise<Job> {
 
   return data.job;
 }
+
+export async function markReviewed(jobId: number): Promise<Job> {
+  const data = await requestJson<JobResponse>(`/jobs/${jobId}/mark-reviewed`, {
+    method: "POST",
+  });
+
+  return data.job;
+}
