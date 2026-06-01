@@ -1,12 +1,25 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ApiError, getJobs, type Job } from "../lib/api";
+import {
+  ApiError,
+  getJobs,
+  type Job,
+  type LocationType,
+} from "../lib/api";
 
 type JobsState =
   | { status: "loading" }
   | { status: "loaded"; jobs: Job[] }
   | { status: "error"; message: string };
+
+function formatLocationType(locationType: LocationType) {
+  return locationType === "PHYSICAL" ? "Physical" : "Remote";
+}
+
+function formatStaffName(staff: { name: string } | null) {
+  return staff?.name ?? "Unassigned";
+}
 
 export function JobsDashboard() {
   const [jobsState, setJobsState] = useState<JobsState>({ status: "loading" });
@@ -53,13 +66,13 @@ export function JobsDashboard() {
         ) : null}
       </div>
 
-      <div className="mt-4 rounded border border-zinc-200 bg-zinc-50 p-4">
+      <div className="mt-4">
         {jobsState.status === "loading" ? (
           <p className="text-sm text-zinc-600">Loading transcription jobs...</p>
         ) : null}
 
         {jobsState.status === "error" ? (
-          <div>
+          <div className="border-l-2 border-red-500 pl-3">
             <p className="text-sm font-medium text-red-700">
               Could not load jobs
             </p>
@@ -74,25 +87,50 @@ export function JobsDashboard() {
         ) : null}
 
         {jobsState.status === "loaded" && jobsState.jobs.length > 0 ? (
-          <ul className="divide-y divide-zinc-200">
-            {jobsState.jobs.map((job) => (
-              <li
-                key={job.id}
-                className="grid gap-1 py-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center"
-              >
-                <div>
-                  <p className="font-medium text-zinc-950">{job.caseName}</p>
-                  <p className="text-zinc-600">
-                    {job.durationMinutes} min · {job.locationType}
-                    {job.city ? ` · ${job.city}` : ""}
-                  </p>
-                </div>
-                <span className="w-fit rounded border border-zinc-300 bg-white px-2 py-1 text-xs font-medium text-zinc-700">
-                  {job.status}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-zinc-200 text-left text-sm">
+              <thead className="bg-zinc-50 text-xs font-medium uppercase text-zinc-500">
+                <tr>
+                  <th className="px-3 py-3">Case</th>
+                  <th className="px-3 py-3">Status</th>
+                  <th className="px-3 py-3">Duration</th>
+                  <th className="px-3 py-3">Location</th>
+                  <th className="px-3 py-3">City</th>
+                  <th className="px-3 py-3">Court Reporter</th>
+                  <th className="px-3 py-3">Editor</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-200">
+                {jobsState.jobs.map((job) => (
+                  <tr key={job.id}>
+                    <td className="whitespace-nowrap px-3 py-3 font-medium text-zinc-950">
+                      {job.caseName}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-3">
+                      <span className="rounded border border-zinc-300 bg-white px-2 py-1 text-xs font-medium text-zinc-700">
+                        {job.status}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-3 text-zinc-700">
+                      {job.durationMinutes} min
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-3 text-zinc-700">
+                      {formatLocationType(job.locationType)}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-3 text-zinc-700">
+                      {job.city ?? "-"}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-3 text-zinc-700">
+                      {formatStaffName(job.reporter)}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-3 text-zinc-700">
+                      {formatStaffName(job.editor)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : null}
       </div>
     </section>
