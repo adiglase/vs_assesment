@@ -8,14 +8,14 @@ test('creates a physical job', async (t) => {
   const res = await app.request
     .post('/jobs')
     .send({
-      caseName: 'State v. Hart',
+      caseName: 'Jakarta licensing hearing',
       durationMinutes: 75,
       locationType: 'PHYSICAL',
       city: 'Jakarta'
     })
 
   assert.equal(res.status, 201)
-  assert.equal(res.body.job.caseName, 'State v. Hart')
+  assert.equal(res.body.job.caseName, 'Jakarta licensing hearing')
   assert.equal(res.body.job.durationMinutes, 75)
   assert.equal(res.body.job.locationType, 'PHYSICAL')
   assert.equal(res.body.job.city, 'Jakarta')
@@ -32,7 +32,7 @@ test('creating a physical job requires city', async (t) => {
   const res = await app.request
     .post('/jobs')
     .send({
-      caseName: 'State v. Hart',
+      caseName: 'Jakarta licensing hearing',
       durationMinutes: 75,
       locationType: 'PHYSICAL'
     })
@@ -128,7 +128,7 @@ test('lists created jobs for the dashboard', async (t) => {
   await app.request
     .post('/jobs')
     .send({
-      caseName: 'State v. Hart',
+      caseName: 'Jakarta licensing hearing',
       durationMinutes: 75,
       locationType: 'PHYSICAL',
       city: 'Jakarta'
@@ -146,7 +146,7 @@ test('lists created jobs for the dashboard', async (t) => {
 
   assert.equal(res.status, 200)
   assert.equal(res.body.jobs.length, 2)
-  assert.equal(res.body.jobs[0].caseName, 'State v. Hart')
+  assert.equal(res.body.jobs[0].caseName, 'Jakarta licensing hearing')
   assert.equal(res.body.jobs[0].city, 'Jakarta')
   assert.equal(res.body.jobs[0].reporter, null)
   assert.equal(res.body.jobs[0].editor, null)
@@ -224,7 +224,7 @@ test('assigning a reporter moves a new job to assigned', async (t) => {
   const createRes = await app.request
     .post('/jobs')
     .send({
-      caseName: 'State v. Hart',
+      caseName: 'Jakarta licensing hearing',
       durationMinutes: 75,
       locationType: 'PHYSICAL',
       city: 'Jakarta'

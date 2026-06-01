@@ -15,7 +15,7 @@ export type TestApp = {
 
 async function build (_t: TestContext): Promise<TestApp> {
   const db = openDatabase(':memory:')
-  resetDatabase(db)
+  resetDatabase(db, { includeDemoData: false })
   _t.after(() => {
     db.close()
   })
