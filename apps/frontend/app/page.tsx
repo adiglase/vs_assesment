@@ -13,13 +13,6 @@ export default function DashboardPage() {
         </p>
       </header>
 
-      <section className="rounded border border-zinc-200 bg-white p-4">
-        <h2 className="text-lg font-medium text-zinc-950">Create Job</h2>
-        <p className="mt-2 text-sm text-zinc-500">
-          Job creation form will be added after the backend API is ready.
-        </p>
-      </section>
-
       <JobsDashboard />
     </main>
   );

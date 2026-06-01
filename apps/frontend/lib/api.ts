@@ -75,6 +75,17 @@ type JobsResponse = {
   jobs: Job[];
 };
 
+type JobResponse = {
+  job: Job;
+};
+
+export type CreateJobInput = {
+  caseName: string;
+  durationMinutes: number;
+  locationType: LocationType;
+  city?: string;
+};
+
 const API_BASE_PATH = "/api";
 
 async function requestJson<T>(
@@ -116,4 +127,13 @@ async function requestJson<T>(
 export async function getJobs(): Promise<Job[]> {
   const data = await requestJson<JobsResponse>("/jobs");
   return data.jobs;
+}
+
+export async function createJob(input: CreateJobInput): Promise<Job> {
+  const data = await requestJson<JobResponse>("/jobs", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
+  return data.job;
 }
