@@ -3,11 +3,14 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import {
   ApiError,
+  assignEditor,
   assignReporter,
   createJob,
+  getEditors,
   getJobs,
   getReporters,
   markTranscribed,
+  type Editor,
   type Job,
   type JobStatus,
   type LocationType,
@@ -24,6 +27,11 @@ type ReportersState =
   | { status: "loaded"; reporters: Reporter[] }
   | { status: "error"; message: string };
 
+type EditorsState =
+  | { status: "loading" }
+  | { status: "loaded"; editors: Editor[] }
+  | { status: "error"; message: string };
+
 type CreateJobFormState = {
   caseName: string;
   durationMinutes: string;
@@ -38,6 +46,10 @@ type CreateJobStatus =
   | { status: "error"; message: string };
 
 type ReporterAssignmentStatus =
+  | { status: "submitting" }
+  | { status: "error"; message: string };
+
+type EditorAssignmentStatus =
   | { status: "submitting" }
   | { status: "error"; message: string };
 
@@ -82,11 +94,20 @@ export function JobsDashboard() {
   const [reportersState, setReportersState] = useState<ReportersState>({
     status: "loading",
   });
+  const [editorsState, setEditorsState] = useState<EditorsState>({
+    status: "loading",
+  });
   const [selectedReporterIds, setSelectedReporterIds] = useState<
+    Record<number, string>
+  >({});
+  const [selectedEditorIds, setSelectedEditorIds] = useState<
     Record<number, string>
   >({});
   const [reporterAssignmentStatuses, setReporterAssignmentStatuses] = useState<
     Record<number, ReporterAssignmentStatus>
+  >({});
+  const [editorAssignmentStatuses, setEditorAssignmentStatuses] = useState<
+    Record<number, EditorAssignmentStatus>
   >({});
   const [workflowTransitionStatuses, setWorkflowTransitionStatuses] = useState<
     Record<number, WorkflowTransitionStatus>
@@ -172,6 +193,35 @@ export function JobsDashboard() {
     };
   }, []);
 
+  useEffect(() => {
+    let ignoreResult = false;
+
+    async function loadInitialEditors() {
+      try {
+        const editors = await getEditors();
+
+        if (!ignoreResult) {
+          setEditorsState({ status: "loaded", editors });
+        }
+      } catch (error) {
+        if (!ignoreResult) {
+          const message =
+            error instanceof ApiError
+              ? error.message
+              : "Could not load editors.";
+
+          setEditorsState({ status: "error", message });
+        }
+      }
+    }
+
+    void loadInitialEditors();
+
+    return () => {
+      ignoreResult = true;
+    };
+  }, []);
+
   function renderReporterAssignmentCell(job: Job) {
     if (job.status !== "NEW") {
       return <span className="text-zinc-500">-</span>;
@@ -250,6 +300,70 @@ export function JobsDashboard() {
             type="button"
           >
             {isSubmitting ? "Assigning..." : "Assign reporter"}
+          </button>
+        </div>
+
+        {assignmentStatus?.status === "error" ? (
+          <p className="max-w-56 whitespace-normal text-sm text-red-600">
+            {assignmentStatus.message}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
+  function renderEditorAssignmentCell(job: Job) {
+    if (job.status !== "TRANSCRIBED" || job.editor !== null) {
+      return <span className="text-zinc-500">-</span>;
+    }
+
+    if (editorsState.status === "loading") {
+      return <span className="text-zinc-600">Loading editors...</span>;
+    }
+
+    if (editorsState.status === "error") {
+      return <span className="text-red-600">{editorsState.message}</span>;
+    }
+
+    const assignmentStatus = editorAssignmentStatuses[job.id];
+    const selectedEditorId = selectedEditorIds[job.id] ?? "";
+    const isSubmitting = assignmentStatus?.status === "submitting";
+
+    return (
+      <div className="grid gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            aria-label={`Editor for ${job.caseName}`}
+            className="w-56 rounded border border-zinc-300 px-2 py-1.5 text-sm text-zinc-950 outline-none focus:border-zinc-500 disabled:cursor-not-allowed disabled:bg-zinc-100"
+            disabled={isSubmitting}
+            value={selectedEditorId}
+            onChange={(event) =>
+              setSelectedEditorIds((current) => ({
+                ...current,
+                [job.id]: event.target.value,
+              }))
+            }
+          >
+            <option value="">Select editor</option>
+            {editorsState.editors.map((editor) => (
+              <option
+                disabled={!editor.availability}
+                key={editor.id}
+                value={editor.id}
+              >
+                {editor.name}
+                {editor.availability ? "" : " - unavailable"}
+              </option>
+            ))}
+          </select>
+
+          <button
+            className="rounded bg-zinc-950 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-zinc-400"
+            disabled={!selectedEditorId || isSubmitting}
+            onClick={() => void handleAssignEditor(job.id, selectedEditorId)}
+            type="button"
+          >
+            {isSubmitting ? "Assigning..." : "Assign editor"}
           </button>
         </div>
 
@@ -390,6 +504,51 @@ export function JobsDashboard() {
           : "Could not mark the transcription job as transcribed.";
 
       setWorkflowTransitionStatuses((current) => ({
+        ...current,
+        [jobId]: { status: "error", message },
+      }));
+    }
+  }
+
+  async function handleAssignEditor(jobId: number, selectedEditorId: string) {
+    const editorId = Number(selectedEditorId);
+
+    if (!Number.isInteger(editorId) || editorId <= 0) {
+      setEditorAssignmentStatuses((current) => ({
+        ...current,
+        [jobId]: {
+          status: "error",
+          message: "Select an available editor.",
+        },
+      }));
+      return;
+    }
+
+    setEditorAssignmentStatuses((current) => ({
+      ...current,
+      [jobId]: { status: "submitting" },
+    }));
+
+    try {
+      await assignEditor(jobId, editorId);
+      await refreshJobs();
+
+      setSelectedEditorIds((current) => {
+        const remaining = { ...current };
+        delete remaining[jobId];
+        return remaining;
+      });
+
+      setEditorAssignmentStatuses((current) => {
+        const remaining = { ...current };
+        delete remaining[jobId];
+        return remaining;
+      });
+    } catch (error) {
+      const message =
+        error instanceof ApiError ? error.message : "Could not assign an editor.";
+
+      setEditorAssignmentStatuses((current) => ({
         ...current,
         [jobId]: { status: "error", message },
       }));
@@ -597,6 +756,7 @@ export function JobsDashboard() {
                     <th className="px-3 py-3">Reporter Assignment</th>
                     <th className="px-3 py-3">Workflow</th>
                     <th className="px-3 py-3">Editor</th>
+                    <th className="px-3 py-3">Editor Assignment</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-200">
@@ -630,6 +790,9 @@ export function JobsDashboard() {
                       </td>
                       <td className="whitespace-nowrap px-3 py-3 text-zinc-700">
                         {formatStaffName(job.editor)}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-3">
+                        {renderEditorAssignmentCell(job)}
                       </td>
                     </tr>
                   ))}

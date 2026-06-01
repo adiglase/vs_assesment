@@ -79,6 +79,10 @@ type ReportersResponse = {
   reporters: Reporter[];
 };
 
+type EditorsResponse = {
+  editors: Editor[];
+};
+
 type JobResponse = {
   job: Job;
 };
@@ -138,6 +142,11 @@ export async function getReporters(): Promise<Reporter[]> {
   return data.reporters;
 }
 
+export async function getEditors(): Promise<Editor[]> {
+  const data = await requestJson<EditorsResponse>("/editors");
+  return data.editors;
+}
+
 export async function createJob(input: CreateJobInput): Promise<Job> {
   const data = await requestJson<JobResponse>("/jobs", {
     method: "POST",
@@ -156,6 +165,18 @@ export async function assignReporter(
     ...(reporterId === undefined
       ? {}
       : { body: JSON.stringify({ reporterId }) }),
+  });
+
+  return data.job;
+}
+
+export async function assignEditor(
+  jobId: number,
+  editorId: number,
+): Promise<Job> {
+  const data = await requestJson<JobResponse>(`/jobs/${jobId}/assign-editor`, {
+    method: "POST",
+    body: JSON.stringify({ editorId }),
   });
 
   return data.job;
