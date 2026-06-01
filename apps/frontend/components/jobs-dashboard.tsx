@@ -3,6 +3,7 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import {
   ApiError,
+  assignReporter,
   createJob,
   getJobs,
   getReporters,
@@ -34,6 +35,10 @@ type CreateJobStatus =
   | { status: "success"; message: string }
   | { status: "error"; message: string };
 
+type ReporterAssignmentStatus =
+  | { status: "submitting" }
+  | { status: "error"; message: string };
+
 const initialCreateJobForm: CreateJobFormState = {
   caseName: "",
   durationMinutes: "",
@@ -56,6 +61,9 @@ export function JobsDashboard() {
   });
   const [selectedReporterIds, setSelectedReporterIds] = useState<
     Record<number, string>
+  >({});
+  const [reporterAssignmentStatuses, setReporterAssignmentStatuses] = useState<
+    Record<number, ReporterAssignmentStatus>
   >({});
   const [createForm, setCreateForm] = useState<CreateJobFormState>(
     initialCreateJobForm,
@@ -143,8 +151,29 @@ export function JobsDashboard() {
       return <span className="text-zinc-500">-</span>;
     }
 
+    const assignmentStatus = reporterAssignmentStatuses[job.id];
+
     if (job.locationType === "PHYSICAL") {
-      return <span className="text-zinc-700">Auto assignment</span>;
+      return (
+        <div className="grid gap-2">
+          <button
+            className="w-max rounded bg-zinc-950 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-zinc-400"
+            disabled={assignmentStatus?.status === "submitting"}
+            onClick={() => void handleAssignPhysicalReporter(job.id)}
+            type="button"
+          >
+            {assignmentStatus?.status === "submitting"
+              ? "Assigning..."
+              : "Auto-assign reporter"}
+          </button>
+
+          {assignmentStatus?.status === "error" ? (
+            <p className="max-w-56 whitespace-normal text-sm text-red-600">
+              {assignmentStatus.message}
+            </p>
+          ) : null}
+        </div>
+      );
     }
 
     if (reportersState.status === "loading") {
@@ -180,6 +209,34 @@ export function JobsDashboard() {
         ))}
       </select>
     );
+  }
+
+  async function handleAssignPhysicalReporter(jobId: number) {
+    setReporterAssignmentStatuses((current) => ({
+      ...current,
+      [jobId]: { status: "submitting" },
+    }));
+
+    try {
+      await assignReporter(jobId);
+      await refreshJobs();
+
+      setReporterAssignmentStatuses((current) => {
+        const remaining = { ...current };
+        delete remaining[jobId];
+        return remaining;
+      });
+    } catch (error) {
+      const message =
+        error instanceof ApiError
+          ? error.message
+          : "Could not assign a court reporter.";
+
+      setReporterAssignmentStatuses((current) => ({
+        ...current,
+        [jobId]: { status: "error", message },
+      }));
+    }
   }
 
   async function handleCreateJobSubmit(event: FormEvent<HTMLFormElement>) {

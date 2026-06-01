@@ -146,3 +146,11 @@ export async function createJob(input: CreateJobInput): Promise<Job> {
 
   return data.job;
 }
+
+export async function assignReporter(jobId: number): Promise<Job> {
+  const data = await requestJson<JobResponse>(`/jobs/${jobId}/assign-reporter`, {
+    method: "POST",
+  });
+
+  return data.job;
+}
