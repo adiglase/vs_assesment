@@ -72,7 +72,7 @@ export function createJob (db: Database.Database, input: CreateJobInput): Dashbo
 export function listDashboardJobs (db: Database.Database): DashboardJob[] {
   const rows = db.prepare(`
     ${dashboardJobSelect}
-    ORDER BY jobs.id ASC
+    ORDER BY jobs.created_at DESC, jobs.id DESC
   `).all() as DashboardJobRow[]
 
   return rows.map(serializeDashboardJob)

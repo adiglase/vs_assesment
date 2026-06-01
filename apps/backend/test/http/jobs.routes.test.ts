@@ -146,13 +146,13 @@ test('lists created jobs for the dashboard', async (t) => {
 
   assert.equal(res.status, 200)
   assert.equal(res.body.jobs.length, 2)
-  assert.equal(res.body.jobs[0].caseName, 'Jakarta licensing hearing')
-  assert.equal(res.body.jobs[0].city, 'Jakarta')
+  assert.equal(res.body.jobs[0].caseName, 'Remote deposition')
+  assert.equal(res.body.jobs[0].city, null)
   assert.equal(res.body.jobs[0].reporter, null)
   assert.equal(res.body.jobs[0].editor, null)
   assert.equal(res.body.jobs[0].payout, null)
-  assert.equal(res.body.jobs[1].caseName, 'Remote deposition')
-  assert.equal(res.body.jobs[1].city, null)
+  assert.equal(res.body.jobs[1].caseName, 'Jakarta licensing hearing')
+  assert.equal(res.body.jobs[1].city, 'Jakarta')
 })
 
 test('job list includes assignment and payout fields', async (t) => {
