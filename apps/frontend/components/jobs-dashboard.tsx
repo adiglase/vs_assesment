@@ -184,30 +184,55 @@ export function JobsDashboard() {
       return <span className="text-red-600">{reportersState.message}</span>;
     }
 
+    const selectedReporterId = selectedReporterIds[job.id] ?? "";
+    const isSubmitting = assignmentStatus?.status === "submitting";
+
     return (
-      <select
-        aria-label={`Court reporter for ${job.caseName}`}
-        className="w-56 rounded border border-zinc-300 px-2 py-1.5 text-sm text-zinc-950 outline-none focus:border-zinc-500"
-        value={selectedReporterIds[job.id] ?? ""}
-        onChange={(event) =>
-          setSelectedReporterIds((current) => ({
-            ...current,
-            [job.id]: event.target.value,
-          }))
-        }
-      >
-        <option value="">Select reporter</option>
-        {reportersState.reporters.map((reporter) => (
-          <option
-            disabled={!reporter.availability}
-            key={reporter.id}
-            value={reporter.id}
+      <div className="grid gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            aria-label={`Court reporter for ${job.caseName}`}
+            className="w-56 rounded border border-zinc-300 px-2 py-1.5 text-sm text-zinc-950 outline-none focus:border-zinc-500 disabled:cursor-not-allowed disabled:bg-zinc-100"
+            disabled={isSubmitting}
+            value={selectedReporterId}
+            onChange={(event) =>
+              setSelectedReporterIds((current) => ({
+                ...current,
+                [job.id]: event.target.value,
+              }))
+            }
           >
-            {reporter.name} ({reporter.city})
-            {reporter.availability ? "" : " - unavailable"}
-          </option>
-        ))}
-      </select>
+            <option value="">Select reporter</option>
+            {reportersState.reporters.map((reporter) => (
+              <option
+                disabled={!reporter.availability}
+                key={reporter.id}
+                value={reporter.id}
+              >
+                {reporter.name} ({reporter.city})
+                {reporter.availability ? "" : " - unavailable"}
+              </option>
+            ))}
+          </select>
+
+          <button
+            className="rounded bg-zinc-950 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-zinc-400"
+            disabled={!selectedReporterId || isSubmitting}
+            onClick={() =>
+              void handleAssignRemoteReporter(job.id, selectedReporterId)
+            }
+            type="button"
+          >
+            {isSubmitting ? "Assigning..." : "Assign reporter"}
+          </button>
+        </div>
+
+        {assignmentStatus?.status === "error" ? (
+          <p className="max-w-56 whitespace-normal text-sm text-red-600">
+            {assignmentStatus.message}
+          </p>
+        ) : null}
+      </div>
     );
   }
 
@@ -220,6 +245,56 @@ export function JobsDashboard() {
     try {
       await assignReporter(jobId);
       await refreshJobs();
+
+      setReporterAssignmentStatuses((current) => {
+        const remaining = { ...current };
+        delete remaining[jobId];
+        return remaining;
+      });
+    } catch (error) {
+      const message =
+        error instanceof ApiError
+          ? error.message
+          : "Could not assign a court reporter.";
+
+      setReporterAssignmentStatuses((current) => ({
+        ...current,
+        [jobId]: { status: "error", message },
+      }));
+    }
+  }
+
+  async function handleAssignRemoteReporter(
+    jobId: number,
+    selectedReporterId: string,
+  ) {
+    const reporterId = Number(selectedReporterId);
+
+    if (!Number.isInteger(reporterId) || reporterId <= 0) {
+      setReporterAssignmentStatuses((current) => ({
+        ...current,
+        [jobId]: {
+          status: "error",
+          message: "Select an available court reporter.",
+        },
+      }));
+      return;
+    }
+
+    setReporterAssignmentStatuses((current) => ({
+      ...current,
+      [jobId]: { status: "submitting" },
+    }));
+
+    try {
+      await assignReporter(jobId, reporterId);
+      await refreshJobs();
+
+      setSelectedReporterIds((current) => {
+        const remaining = { ...current };
+        delete remaining[jobId];
+        return remaining;
+      });
 
       setReporterAssignmentStatuses((current) => {
         const remaining = { ...current };
