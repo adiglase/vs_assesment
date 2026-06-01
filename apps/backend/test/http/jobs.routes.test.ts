@@ -444,3 +444,85 @@ test('concurrent reporter assignment allows exactly one winner', async (t) => {
     name: 'Amelia Hart'
   })
 })
+
+test('marking an assigned job transcribed moves it to transcribed', async (t) => {
+  const app = await build(t)
+
+  const createRes = await app.request
+    .post('/jobs')
+    .send({
+      caseName: 'Remote deposition',
+      durationMinutes: 45,
+      locationType: 'REMOTE'
+    })
+
+  const jobId = createRes.body.job.id
+
+  await app.request
+    .post(`/jobs/${String(jobId)}/assign-reporter`)
+    .send({ reporterId: 1 })
+
+  const res = await app.request.post(`/jobs/${String(jobId)}/mark-transcribed`)
+
+  assert.equal(res.status, 200)
+  assert.equal(res.body.job.status, 'TRANSCRIBED')
+  assert.deepStrictEqual(res.body.job.reporter, {
+    id: 1,
+    name: 'Amelia Hart'
+  })
+  assert.equal(res.body.job.editor, null)
+  assert.equal(typeof res.body.job.timestamps.transcribedAt, 'string')
+  assert.equal(typeof res.body.job.timestamps.updatedAt, 'string')
+})
+
+test('marking a new job transcribed fails', async (t) => {
+  const app = await build(t)
+
+  const createRes = await app.request
+    .post('/jobs')
+    .send({
+      caseName: 'Remote deposition',
+      durationMinutes: 45,
+      locationType: 'REMOTE'
+    })
+
+  const res = await app.request.post(`/jobs/${String(createRes.body.job.id)}/mark-transcribed`)
+
+  assert.equal(res.status, 409)
+  assert.deepStrictEqual(res.body, {
+    error: {
+      code: 'INVALID_JOB_STATUS',
+      message: 'Marking transcribed requires an assigned job'
+    }
+  })
+})
+
+test('marking a transcribed job transcribed again fails', async (t) => {
+  const app = await build(t)
+
+  const createRes = await app.request
+    .post('/jobs')
+    .send({
+      caseName: 'Remote deposition',
+      durationMinutes: 45,
+      locationType: 'REMOTE'
+    })
+
+  const jobId = createRes.body.job.id
+
+  await app.request
+    .post(`/jobs/${String(jobId)}/assign-reporter`)
+    .send({ reporterId: 1 })
+
+  const firstRes = await app.request.post(`/jobs/${String(jobId)}/mark-transcribed`)
+  const secondRes = await app.request.post(`/jobs/${String(jobId)}/mark-transcribed`)
+
+  assert.equal(firstRes.status, 200)
+  assert.equal(secondRes.status, 409)
+  assert.deepStrictEqual(secondRes.body, {
+    error: {
+      code: 'INVALID_JOB_STATUS',
+      message: 'Marking transcribed requires an assigned job'
+    }
+  })
+})

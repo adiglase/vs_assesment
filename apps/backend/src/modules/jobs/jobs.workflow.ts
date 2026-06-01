@@ -3,7 +3,8 @@ import {
   assignReporterToJob,
   findAvailableReporterForJob,
   getDashboardJobById,
-  getReporterForAssignment
+  getReporterForAssignment,
+  markJobTranscribed
 } from './jobs.repository'
 import { canTransitionJobStatus } from './jobs.state-machine'
 import type { DashboardJob, ReporterAssignmentCandidate } from './jobs.types'
@@ -28,6 +29,7 @@ type WorkflowResult<T> =
   | { ok: false, error: WorkflowFailure }
 
 const reporterAssignmentTargetStatus = 'ASSIGNED'
+const markTranscribedTargetStatus = 'TRANSCRIBED'
 
 export function assignReporter (
   db: Database.Database,
@@ -65,6 +67,42 @@ export function assignReporter (
     }
 
     return success(assignedJob)
+  })
+
+  return run(jobId)
+}
+
+export function markTranscribed (
+  db: Database.Database,
+  jobId: number
+): WorkflowResult<DashboardJob> {
+  const run = db.transaction((id: number): WorkflowResult<DashboardJob> => {
+    const job = getDashboardJobById(db, id)
+
+    if (job === null) {
+      return failure('JOB_NOT_FOUND', 'Job was not found')
+    }
+
+    if (!canTransitionJobStatus(job.status, markTranscribedTargetStatus)) {
+      return failure('INVALID_JOB_STATUS', 'Marking transcribed requires an assigned job')
+    }
+
+    const marked = markJobTranscribed(db, id)
+
+    if (!marked) {
+      return failure(
+        'INVALID_JOB_STATUS',
+        'Job could not be marked transcribed because its workflow state changed'
+      )
+    }
+
+    const transcribedJob = getDashboardJobById(db, id)
+
+    if (transcribedJob === null) {
+      throw new Error(`Transcribed job ${String(id)} could not be loaded`)
+    }
+
+    return success(transcribedJob)
   })
 
   return run(jobId)

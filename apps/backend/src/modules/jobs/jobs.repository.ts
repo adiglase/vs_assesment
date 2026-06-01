@@ -141,3 +141,21 @@ export function assignReporterToJob (
 
   return result.changes === 1
 }
+
+export function markJobTranscribed (
+  db: Database.Database,
+  jobId: number
+): boolean {
+  const result = db.prepare(`
+    UPDATE jobs
+    SET
+      status = 'TRANSCRIBED',
+      transcribed_at = datetime('now'),
+      updated_at = datetime('now')
+    WHERE id = ?
+      AND status = 'ASSIGNED'
+      AND reporter_id IS NOT NULL
+  `).run(jobId)
+
+  return result.changes === 1
+}
