@@ -7,7 +7,9 @@ import {
   createJob,
   getJobs,
   getReporters,
+  markTranscribed,
   type Job,
+  type JobStatus,
   type LocationType,
   type Reporter,
 } from "../lib/api";
@@ -39,6 +41,10 @@ type ReporterAssignmentStatus =
   | { status: "submitting" }
   | { status: "error"; message: string };
 
+type WorkflowTransitionStatus =
+  | { status: "submitting" }
+  | { status: "error"; message: string };
+
 const initialCreateJobForm: CreateJobFormState = {
   caseName: "",
   durationMinutes: "",
@@ -54,6 +60,23 @@ function formatStaffName(staff: { name: string } | null) {
   return staff?.name ?? "Unassigned";
 }
 
+function getStatusBadgeClass(status: JobStatus) {
+  const baseClass = "rounded border px-2 py-1 text-xs font-medium";
+
+  switch (status) {
+    case "NEW":
+      return `${baseClass} border-zinc-300 bg-zinc-50 text-zinc-700`;
+    case "ASSIGNED":
+      return `${baseClass} border-blue-200 bg-blue-50 text-blue-700`;
+    case "TRANSCRIBED":
+      return `${baseClass} border-amber-200 bg-amber-50 text-amber-800`;
+    case "REVIEWED":
+      return `${baseClass} border-violet-200 bg-violet-50 text-violet-700`;
+    case "COMPLETED":
+      return `${baseClass} border-green-200 bg-green-50 text-green-700`;
+  }
+}
+
 export function JobsDashboard() {
   const [jobsState, setJobsState] = useState<JobsState>({ status: "loading" });
   const [reportersState, setReportersState] = useState<ReportersState>({
@@ -64,6 +87,9 @@ export function JobsDashboard() {
   >({});
   const [reporterAssignmentStatuses, setReporterAssignmentStatuses] = useState<
     Record<number, ReporterAssignmentStatus>
+  >({});
+  const [workflowTransitionStatuses, setWorkflowTransitionStatuses] = useState<
+    Record<number, WorkflowTransitionStatus>
   >({});
   const [createForm, setCreateForm] = useState<CreateJobFormState>(
     initialCreateJobForm,
@@ -236,6 +262,34 @@ export function JobsDashboard() {
     );
   }
 
+  function renderWorkflowActionCell(job: Job) {
+    if (job.status !== "ASSIGNED") {
+      return <span className="text-zinc-500">-</span>;
+    }
+
+    const transitionStatus = workflowTransitionStatuses[job.id];
+    const isSubmitting = transitionStatus?.status === "submitting";
+
+    return (
+      <div className="grid gap-2">
+        <button
+          className="w-max cursor-pointer rounded bg-zinc-950 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-zinc-400"
+          disabled={isSubmitting}
+          onClick={() => void handleMarkTranscribed(job.id)}
+          type="button"
+        >
+          {isSubmitting ? "Updating..." : "Mark transcribed"}
+        </button>
+
+        {transitionStatus?.status === "error" ? (
+          <p className="max-w-56 whitespace-normal text-sm text-red-600">
+            {transitionStatus.message}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
   async function handleAssignPhysicalReporter(jobId: number) {
     setReporterAssignmentStatuses((current) => ({
       ...current,
@@ -308,6 +362,34 @@ export function JobsDashboard() {
           : "Could not assign a court reporter.";
 
       setReporterAssignmentStatuses((current) => ({
+        ...current,
+        [jobId]: { status: "error", message },
+      }));
+    }
+  }
+
+  async function handleMarkTranscribed(jobId: number) {
+    setWorkflowTransitionStatuses((current) => ({
+      ...current,
+      [jobId]: { status: "submitting" },
+    }));
+
+    try {
+      await markTranscribed(jobId);
+      await refreshJobs();
+
+      setWorkflowTransitionStatuses((current) => {
+        const remaining = { ...current };
+        delete remaining[jobId];
+        return remaining;
+      });
+    } catch (error) {
+      const message =
+        error instanceof ApiError
+          ? error.message
+          : "Could not mark the transcription job as transcribed.";
+
+      setWorkflowTransitionStatuses((current) => ({
         ...current,
         [jobId]: { status: "error", message },
       }));
@@ -513,6 +595,7 @@ export function JobsDashboard() {
                     <th className="px-3 py-3">City</th>
                     <th className="px-3 py-3">Court Reporter</th>
                     <th className="px-3 py-3">Reporter Assignment</th>
+                    <th className="px-3 py-3">Workflow</th>
                     <th className="px-3 py-3">Editor</th>
                   </tr>
                 </thead>
@@ -523,7 +606,7 @@ export function JobsDashboard() {
                         {job.caseName}
                       </td>
                       <td className="whitespace-nowrap px-3 py-3">
-                        <span className="rounded border border-zinc-300 bg-white px-2 py-1 text-xs font-medium text-zinc-700">
+                        <span className={getStatusBadgeClass(job.status)}>
                           {job.status}
                         </span>
                       </td>
@@ -541,6 +624,9 @@ export function JobsDashboard() {
                       </td>
                       <td className="whitespace-nowrap px-3 py-3">
                         {renderReporterAssignmentCell(job)}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-3">
+                        {renderWorkflowActionCell(job)}
                       </td>
                       <td className="whitespace-nowrap px-3 py-3 text-zinc-700">
                         {formatStaffName(job.editor)}

@@ -160,3 +160,11 @@ export async function assignReporter(
 
   return data.job;
 }
+
+export async function markTranscribed(jobId: number): Promise<Job> {
+  const data = await requestJson<JobResponse>(`/jobs/${jobId}/mark-transcribed`, {
+    method: "POST",
+  });
+
+  return data.job;
+}
