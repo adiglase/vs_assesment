@@ -74,7 +74,7 @@ function formatStaffName(staff: { name: string } | null) {
 }
 
 function getStatusBadgeClass(status: JobStatus) {
-  const baseClass = "rounded border px-2 py-1 text-xs font-medium";
+  const baseClass = "rounded border px-1.5 py-0.5 text-xs font-medium";
 
   switch (status) {
     case "NEW":
@@ -232,9 +232,9 @@ export function JobsDashboard() {
 
     if (job.locationType === "PHYSICAL") {
       return (
-        <div className="grid gap-2">
+        <div className="grid gap-1">
           <button
-            className="w-max rounded bg-zinc-950 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-zinc-400"
+            className="w-max rounded bg-zinc-950 px-2 py-1 text-xs font-medium text-white disabled:cursor-not-allowed disabled:bg-zinc-400"
             disabled={assignmentStatus?.status === "submitting"}
             onClick={() => void handleAssignPhysicalReporter(job.id)}
             type="button"
@@ -245,7 +245,7 @@ export function JobsDashboard() {
           </button>
 
           {assignmentStatus?.status === "error" ? (
-            <p className="max-w-56 whitespace-normal text-sm text-red-600">
+            <p className="max-w-56 whitespace-normal text-xs text-red-600">
               {assignmentStatus.message}
             </p>
           ) : null}
@@ -265,11 +265,11 @@ export function JobsDashboard() {
     const isSubmitting = assignmentStatus?.status === "submitting";
 
     return (
-      <div className="grid gap-2">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="grid gap-1">
+        <div className="flex flex-wrap items-center gap-1.5">
           <select
             aria-label={`Court reporter for ${job.caseName}`}
-            className="w-56 rounded border border-zinc-300 px-2 py-1.5 text-sm text-zinc-950 outline-none focus:border-zinc-500 disabled:cursor-not-allowed disabled:bg-zinc-100"
+            className="w-48 rounded border border-zinc-300 px-2 py-1 text-xs text-zinc-950 outline-none focus:border-zinc-500 disabled:cursor-not-allowed disabled:bg-zinc-100"
             disabled={isSubmitting}
             value={selectedReporterId}
             onChange={(event) =>
@@ -293,7 +293,7 @@ export function JobsDashboard() {
           </select>
 
           <button
-            className="rounded bg-zinc-950 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-zinc-400"
+            className="rounded bg-zinc-950 px-2 py-1 text-xs font-medium text-white disabled:cursor-not-allowed disabled:bg-zinc-400"
             disabled={!selectedReporterId || isSubmitting}
             onClick={() =>
               void handleAssignRemoteReporter(job.id, selectedReporterId)
@@ -305,7 +305,7 @@ export function JobsDashboard() {
         </div>
 
         {assignmentStatus?.status === "error" ? (
-          <p className="max-w-56 whitespace-normal text-sm text-red-600">
+          <p className="max-w-56 whitespace-normal text-xs text-red-600">
             {assignmentStatus.message}
           </p>
         ) : null}
@@ -331,11 +331,11 @@ export function JobsDashboard() {
     const isSubmitting = assignmentStatus?.status === "submitting";
 
     return (
-      <div className="grid gap-2">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="grid gap-1">
+        <div className="flex flex-wrap items-center gap-1.5">
           <select
             aria-label={`Editor for ${job.caseName}`}
-            className="w-56 rounded border border-zinc-300 px-2 py-1.5 text-sm text-zinc-950 outline-none focus:border-zinc-500 disabled:cursor-not-allowed disabled:bg-zinc-100"
+            className="w-48 rounded border border-zinc-300 px-2 py-1 text-xs text-zinc-950 outline-none focus:border-zinc-500 disabled:cursor-not-allowed disabled:bg-zinc-100"
             disabled={isSubmitting}
             value={selectedEditorId}
             onChange={(event) =>
@@ -359,7 +359,7 @@ export function JobsDashboard() {
           </select>
 
           <button
-            className="rounded bg-zinc-950 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-zinc-400"
+            className="rounded bg-zinc-950 px-2 py-1 text-xs font-medium text-white disabled:cursor-not-allowed disabled:bg-zinc-400"
             disabled={!selectedEditorId || isSubmitting}
             onClick={() => void handleAssignEditor(job.id, selectedEditorId)}
             type="button"
@@ -369,7 +369,7 @@ export function JobsDashboard() {
         </div>
 
         {assignmentStatus?.status === "error" ? (
-          <p className="max-w-56 whitespace-normal text-sm text-red-600">
+          <p className="max-w-56 whitespace-normal text-xs text-red-600">
             {assignmentStatus.message}
           </p>
         ) : null}
@@ -398,9 +398,9 @@ export function JobsDashboard() {
     }
 
     return (
-      <div className="grid gap-2">
+      <div className="grid gap-1">
         <button
-          className="w-max cursor-pointer rounded bg-zinc-950 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-zinc-400"
+          className="w-max cursor-pointer rounded bg-zinc-950 px-2 py-1 text-xs font-medium text-white disabled:cursor-not-allowed disabled:bg-zinc-400"
           disabled={isSubmitting}
           onClick={action.onClick}
           type="button"
@@ -409,7 +409,7 @@ export function JobsDashboard() {
         </button>
 
         {transitionStatus?.status === "error" ? (
-          <p className="max-w-56 whitespace-normal text-sm text-red-600">
+          <p className="max-w-56 whitespace-normal text-xs text-red-600">
             {transitionStatus.message}
           </p>
         ) : null}
@@ -680,7 +680,7 @@ export function JobsDashboard() {
           <label className="grid gap-1 text-sm">
             <span className="font-medium text-zinc-700">Case name</span>
             <input
-              className="rounded border border-zinc-300 px-3 py-2 text-zinc-950 outline-none focus:border-zinc-500"
+              className="rounded border border-zinc-300 px-2 py-1.5 text-sm text-zinc-950 outline-none focus:border-zinc-500"
               name="caseName"
               value={createForm.caseName}
               onChange={(event) =>
@@ -696,7 +696,7 @@ export function JobsDashboard() {
           <label className="grid gap-1 text-sm">
             <span className="font-medium text-zinc-700">Duration minutes</span>
             <input
-              className="rounded border border-zinc-300 px-3 py-2 text-zinc-950 outline-none focus:border-zinc-500"
+              className="rounded border border-zinc-300 px-2 py-1.5 text-sm text-zinc-950 outline-none focus:border-zinc-500"
               min="1"
               name="durationMinutes"
               type="number"
@@ -714,7 +714,7 @@ export function JobsDashboard() {
           <label className="grid gap-1 text-sm">
             <span className="font-medium text-zinc-700">Location type</span>
             <select
-              className="rounded border border-zinc-300 px-3 py-2 text-zinc-950 outline-none focus:border-zinc-500"
+              className="rounded border border-zinc-300 px-2 py-1.5 text-sm text-zinc-950 outline-none focus:border-zinc-500"
               name="locationType"
               value={createForm.locationType}
               onChange={(event) =>
@@ -733,7 +733,7 @@ export function JobsDashboard() {
             <label className="grid gap-1 text-sm">
               <span className="font-medium text-zinc-700">City</span>
               <input
-                className="rounded border border-zinc-300 px-3 py-2 text-zinc-950 outline-none focus:border-zinc-500"
+                className="rounded border border-zinc-300 px-2 py-1.5 text-sm text-zinc-950 outline-none focus:border-zinc-500"
                 name="city"
                 value={createForm.city}
                 onChange={(event) =>
@@ -749,7 +749,7 @@ export function JobsDashboard() {
 
           <div className="flex items-center gap-3 md:col-span-2">
             <button
-              className="rounded bg-zinc-950 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-zinc-400"
+              className="rounded bg-zinc-950 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-zinc-400"
               disabled={createStatus.status === "submitting"}
               type="submit"
             >
@@ -806,14 +806,14 @@ export function JobsDashboard() {
               <table className="min-w-full divide-y divide-zinc-200 text-left text-sm">
                 <thead className="bg-zinc-50 text-xs font-medium uppercase text-zinc-500">
                   <tr>
-                    <th className="px-3 py-3">Case</th>
-                    <th className="px-3 py-3">Status</th>
-                    <th className="px-3 py-3">Duration</th>
-                    <th className="px-3 py-3">Location</th>
-                    <th className="px-3 py-3">City</th>
-                    <th className="px-3 py-3">Court Reporter</th>
-                    <th className="px-3 py-3">Editor</th>
-                    <th className="px-3 py-3">
+                    <th className="px-3 py-2">Case</th>
+                    <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2">Duration</th>
+                    <th className="px-3 py-2">Location</th>
+                    <th className="px-3 py-2">City</th>
+                    <th className="px-3 py-2">Court Reporter</th>
+                    <th className="px-3 py-2">Editor</th>
+                    <th className="px-3 py-2">
                       Next Action
                     </th>
                   </tr>
@@ -821,30 +821,30 @@ export function JobsDashboard() {
                 <tbody className="divide-y divide-zinc-200">
                   {jobsState.jobs.map((job) => (
                     <tr key={job.id}>
-                      <td className="whitespace-nowrap px-3 py-3 font-medium text-zinc-950">
+                      <td className="whitespace-nowrap px-3 py-2 font-medium text-zinc-950">
                         {job.caseName}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-3">
+                      <td className="whitespace-nowrap px-3 py-2">
                         <span className={getStatusBadgeClass(job.status)}>
                           {job.status}
                         </span>
                       </td>
-                      <td className="whitespace-nowrap px-3 py-3 text-zinc-700">
+                      <td className="whitespace-nowrap px-3 py-2 text-zinc-700">
                         {job.durationMinutes} min
                       </td>
-                      <td className="whitespace-nowrap px-3 py-3 text-zinc-700">
+                      <td className="whitespace-nowrap px-3 py-2 text-zinc-700">
                         {formatLocationType(job.locationType)}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-3 text-zinc-700">
+                      <td className="whitespace-nowrap px-3 py-2 text-zinc-700">
                         {job.city ?? "-"}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-3 text-zinc-700">
+                      <td className="whitespace-nowrap px-3 py-2 text-zinc-700">
                         {formatStaffName(job.reporter)}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-3 text-zinc-700">
+                      <td className="whitespace-nowrap px-3 py-2 text-zinc-700">
                         {formatStaffName(job.editor)}
                       </td>
-                      <td className="min-w-72 px-3 py-3 align-top">
+                      <td className="min-w-64 px-3 py-2 align-top">
                         {renderNextActionCell(job)}
                       </td>
                     </tr>
