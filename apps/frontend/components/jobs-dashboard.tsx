@@ -74,6 +74,16 @@ function formatStaffName(staff: { name: string } | null) {
   return staff?.name ?? "Unassigned";
 }
 
+const idrFormatter = new Intl.NumberFormat("id-ID", {
+  currency: "IDR",
+  maximumFractionDigits: 0,
+  style: "currency",
+});
+
+function formatIdr(amount: number) {
+  return idrFormatter.format(amount);
+}
+
 function getStatusBadgeClass(status: JobStatus) {
   const baseClass = "rounded border px-1.5 py-0.5 text-xs font-medium";
 
@@ -448,6 +458,35 @@ export function JobsDashboard() {
     }
 
     return <span className="text-zinc-500">No action</span>;
+  }
+
+  function renderPayoutCell(job: Job) {
+    if (job.status !== "COMPLETED" || job.payout === null) {
+      return <span className="text-zinc-500">No payout</span>;
+    }
+
+    return (
+      <dl className="grid min-w-40 gap-1 text-xs text-zinc-700">
+        <div className="flex items-center justify-between gap-4">
+          <dt>Reporter</dt>
+          <dd className="font-medium text-zinc-900">
+            {formatIdr(job.payout.reporterAmount)}
+          </dd>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <dt>Editor</dt>
+          <dd className="font-medium text-zinc-900">
+            {formatIdr(job.payout.editorAmount)}
+          </dd>
+        </div>
+        <div className="flex items-center justify-between gap-4 border-t border-zinc-200 pt-1">
+          <dt className="font-medium text-zinc-900">Total</dt>
+          <dd className="font-semibold text-zinc-950">
+            {formatIdr(job.payout.totalAmount)}
+          </dd>
+        </div>
+      </dl>
+    );
   }
 
   async function handleAssignPhysicalReporter(jobId: number) {
@@ -856,6 +895,7 @@ export function JobsDashboard() {
                     <th className="px-3 py-2">City</th>
                     <th className="px-3 py-2">Court Reporter</th>
                     <th className="px-3 py-2">Editor</th>
+                    <th className="px-3 py-2">Payout</th>
                     <th className="px-3 py-2">
                       Next Action
                     </th>
@@ -886,6 +926,9 @@ export function JobsDashboard() {
                       </td>
                       <td className="whitespace-nowrap px-3 py-2 text-zinc-700">
                         {formatStaffName(job.editor)}
+                      </td>
+                      <td className="px-3 py-2 align-top">
+                        {renderPayoutCell(job)}
                       </td>
                       <td className="min-w-64 px-3 py-2 align-top">
                         {renderNextActionCell(job)}
