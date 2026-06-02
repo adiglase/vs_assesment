@@ -197,3 +197,11 @@ export async function markReviewed(jobId: number): Promise<Job> {
 
   return data.job;
 }
+
+export async function completeJob(jobId: number): Promise<Job> {
+  const data = await requestJson<JobResponse>(`/jobs/${jobId}/complete`, {
+    method: "POST",
+  });
+
+  return data.job;
+}

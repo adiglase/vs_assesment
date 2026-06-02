@@ -5,6 +5,7 @@ import {
   ApiError,
   assignEditor,
   assignReporter,
+  completeJob,
   createJob,
   getEditors,
   getJobs,
@@ -380,18 +381,28 @@ export function JobsDashboard() {
   function renderWorkflowActionCell(job: Job) {
     const transitionStatus = workflowTransitionStatuses[job.id];
     const isSubmitting = transitionStatus?.status === "submitting";
-    const action =
-      job.status === "ASSIGNED"
-        ? {
-            label: "Mark transcribed",
-            onClick: () => void handleMarkTranscribed(job.id),
-          }
-        : job.status === "TRANSCRIBED" && job.editor !== null
-          ? {
-              label: "Mark reviewed",
-              onClick: () => void handleMarkReviewed(job.id),
-            }
-          : null;
+    let action: { label: string; onClick: () => void } | null = null;
+
+    if (job.status === "ASSIGNED") {
+      action = {
+        label: "Mark transcribed",
+        onClick: () => void handleMarkTranscribed(job.id),
+      };
+    }
+
+    if (job.status === "TRANSCRIBED" && job.editor !== null) {
+      action = {
+        label: "Mark reviewed",
+        onClick: () => void handleMarkReviewed(job.id),
+      };
+    }
+
+    if (job.status === "REVIEWED") {
+      action = {
+        label: "Complete job",
+        onClick: () => void handleCompleteJob(job.id),
+      };
+    }
 
     if (action === null) {
       return <span className="text-zinc-500">-</span>;
@@ -430,6 +441,10 @@ export function JobsDashboard() {
       return job.editor === null
         ? renderEditorAssignmentCell(job)
         : renderWorkflowActionCell(job);
+    }
+
+    if (job.status === "REVIEWED") {
+      return renderWorkflowActionCell(job);
     }
 
     return <span className="text-zinc-500">No action</span>;
@@ -561,6 +576,34 @@ export function JobsDashboard() {
         error instanceof ApiError
           ? error.message
           : "Could not mark the transcription job as reviewed.";
+
+      setWorkflowTransitionStatuses((current) => ({
+        ...current,
+        [jobId]: { status: "error", message },
+      }));
+    }
+  }
+
+  async function handleCompleteJob(jobId: number) {
+    setWorkflowTransitionStatuses((current) => ({
+      ...current,
+      [jobId]: { status: "submitting" },
+    }));
+
+    try {
+      await completeJob(jobId);
+      await refreshJobs();
+
+      setWorkflowTransitionStatuses((current) => {
+        const remaining = { ...current };
+        delete remaining[jobId];
+        return remaining;
+      });
+    } catch (error) {
+      const message =
+        error instanceof ApiError
+          ? error.message
+          : "Could not complete the transcription job.";
 
       setWorkflowTransitionStatuses((current) => ({
         ...current,
