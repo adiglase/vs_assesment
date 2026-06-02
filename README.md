@@ -64,6 +64,12 @@ A reviewer can also run the full flow manually:
 6. Complete the job.
 7. Confirm that the payout record appears in the job list.
 
+## Screenshot
+
+The dashboard starts with seeded jobs across the workflow, including assigned, transcribed, reviewed, and completed examples.
+
+![Court Reporting Workflow dashboard](docs/screenshots/dashboard.png)
+
 ## Tech Stack And Tradeoffs
 
 ### Express
@@ -345,7 +351,6 @@ These are intentionally out of scope for this assessment:
 - editing or deleting jobs
 - reporter/editor availability management UI
 - transcript text editing
-- AI transcription integration
 - realtime updates
 - audit log/history
 - payment processing
