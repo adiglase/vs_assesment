@@ -25,6 +25,10 @@ import type {
   RowMutationStatuses,
 } from "./jobs-dashboard/types";
 
+type RefreshJobsOptions = {
+  showLoading?: boolean;
+};
+
 const initialCreateJobForm: CreateJobFormState = {
   caseName: "",
   durationMinutes: "",
@@ -59,8 +63,10 @@ export function JobsDashboard() {
     status: "idle",
   });
 
-  const refreshJobs = useCallback(async () => {
-    setJobsState({ status: "loading" });
+  const refreshJobs = useCallback(async (options: RefreshJobsOptions = {}) => {
+    if (options.showLoading ?? true) {
+      setJobsState({ status: "loading" });
+    }
 
     try {
       const jobs = await getJobs();
@@ -206,7 +212,7 @@ export function JobsDashboard() {
 
     try {
       await mutation();
-      await refreshJobs();
+      await refreshJobs({ showLoading: false });
       setRowSuccess(jobId, successMessage);
     } catch (error) {
       setRowError(jobId, getApiErrorMessage(error, fallbackErrorMessage));
@@ -390,4 +396,3 @@ export function JobsDashboard() {
     </>
   );
 }
-
